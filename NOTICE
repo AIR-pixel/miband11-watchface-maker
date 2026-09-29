@@ -1,0 +1,76 @@
+# NOTICE — 第三方来源与合规说明
+
+本仓库（miband11-watchface-maker）的**自有源码**以 MIT 协议发布（见 [LICENSE](./LICENSE)）。
+以下是涉及的第三方组件、来源与边界说明。
+
+---
+
+## 1. Compiler.exe —— 未随仓库分发，需自备
+
+Windows 版的打包环节会调用 `Compiler.exe`（小米 Vela IDE 里的表盘编译器）。
+
+- 本项目**不打包、不分发**该文件，仓库里也没有它。
+- 用户需要自行准备：从 [m0tral/EasyFace](https://github.com/m0tral/EasyFace) 的工具目录，
+  或你自己的 Vela 开发环境里复制出来，然后在界面上指定路径。
+- 关于 EasyFace：该仓库**没有 LICENSE 文件**，README 也无授权条款，
+  且其本身是从小米官方 Vela IDE 中提取/修改的产物 —— 属**默认保留所有权利**。
+  本项目只要求用户自备，不参与其再分发。
+- **安卓版不依赖 Compiler.exe 运行**。它用纯 Java 按格式拼装 `.face`
+  （`watchface-android/core/face/FaceBuilder.java`），这条路线没有这个依赖。
+
+> 如果你打算把本项目打包成二进制并公开分发，请自行评估 Compiler.exe 的再分发合法性。
+
+---
+
+## 2. `.face` 二进制格式 —— 逆向所得的事实性知识
+
+`docs/face格式规范.md` 里记录的布局、偏移量、字段含义，是通过**对比 Compiler.exe
+的输入输出、逐字节分析其产物**得出的**事实性格式定义**（类似文件格式规范）。
+
+- 这类"格式长什么样"的知识本身不构成对代码的复制。
+- 本仓库未包含、也未分发任何小米官方固件、官方表盘素材或官方工具二进制。
+
+## 3. 构建管线思路 —— 参考 Apache-2.0 模板
+
+- 参考模板：[Zaona/simple-weather-watchface](https://github.com/Zaona/simple-weather-watchface)
+  （Apache License 2.0）。
+- 本项目借鉴了其**命令行构建思路**（`Compiler.exe -b <fprj> <out> <name> <id>`）、
+  `.fprj` 的 XML 结构、以及 `.face` 头部表盘 ID 的回写位置（偏移 40）等**功能性事实**。
+- 这些属于实现思路与格式定义。本仓库**未复制其任何源码文件**；为表感谢与透明，在此署名。
+
+## 4. 生成的 Lua 代码
+
+- `watchface-tool/watchface_tool/lua.py` 与
+  `watchface-android/core/face/LuaGen.java` 生成的 `main.lua`，使用 LVGL / dataman
+  的**公开 API**（`lvgl.Timer`、`dataman.subscribe`、`pageOnPause/Resume`），
+  为本项目自行编写，非复制自上述模板的天气表盘代码。
+
+## 5. 运行时依赖（均未打包，由用户自行安装）
+
+| 组件 | 用在哪 | 许可证 |
+|---|---|---|
+| Pillow | Windows 版 · 解码/量化/编码 | HPND（PIL 许可证） |
+| PyQt5 | Windows 版 · GUI | GPL v3 / 商业双许可 |
+| ffmpeg | Windows 版 · 视频抽帧 | LGPL / GPL（取决于构建） |
+| Android SDK build-tools | 安卓版 · 构建 APK | Android SDK 许可 |
+| Python 标准库 / Java 标准库 | 两端 | PSF / GPL+CE |
+
+> PyQt5 是 **GPL v3 / 商业双许可**。若你打算把 Windows 版做成闭源商业产品分发，
+> 需要自行处理 PyQt5 的授权（改用 PySide6 或购买商业许可）。
+
+## 6. 本仓库**不包含**的东西
+
+为避免疑义，明确列出本仓库刻意排除的内容：
+
+- ❌ `Compiler.exe` 及任何小米官方工具二进制
+- ❌ 从小米官方固件 / 官方表盘中提取的素材
+- ❌ 用于逆向分析的官方表盘样本（`.face` 样本留在本地，未提交）
+- ❌ 任何生成好的 `.face` 产物（含素材帧，体积大且可能涉及他人版权）
+- ❌ 用户自己的视频 / 图片素材
+
+---
+
+## 7. 商标
+
+"小米"、"Xiaomi"、"Mi Band"、"小米手环"、"Vela" 等为其各自权利人的商标。
+本项目是**非官方的第三方工具**，与小米公司无任何关联，未获其授权、赞助或认可。

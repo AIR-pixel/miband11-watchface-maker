@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------- 编译/打包产物
+# 全部是可再生产物，进版本历史只会让 clone 变慢。
+watchface-tool/__pycache__/
+watchface-tool/**/__pycache__/
+watchface-android/out/
+__pycache__/
+*.py[cod]
+*.class
+*.dex
+
+# ---------------------------------------------------------------- .face 生成物
+# 生成的表盘是「素材 + 参数」的产物，不是源码。
+# 而且 `.face` 里嵌着原始素材的每一帧 —— 体积大、可能含他人版权内容，
+# 不适合进公开仓库的版本历史。
+*.face
+watchface_out/
+watchface-tool/test_out_pure/
+
+# ---------------------------------------------------------------- 安卓签名与安装包
+# debug.keystore：build.sh 在缺失时会自动生成，不需要进仓库；
+#   而且把签名私钥提交到公开仓库是纯粹的坏习惯。
+# APK：编译产物，走 GitHub Release 分发，不进源码树。
+watchface-android/debug.keystore
+watchface-android/*.apk
+watchface-android/*.apk.idsig
+
+# ---------------------------------------------------------------- Compiler.exe
+# 来源不明（无开源协议，见 NOTICE），本项目不分发。
+# 自备路径写在本机 ~/.watchface_tool.json 或 GUI 里，不进仓库。
+Compiler.exe
+assets/Compiler.exe
+watchface-tool/Compiler.exe
+
+# ---------------------------------------------------------------- 本机配置
+# 含本机 Compiler.exe 路径等个人环境信息。
+.watchface_tool.json
+
+# ---------------------------------------------------------------- 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.log
+
+# ---------------------------------------------------------------- 发布工具
+# 上传时用的临时脚本，内容是仓库专属的发布配置，不属于本仓库源码。
+.gh_publish.py
+
+# ---------------------------------------------------------------- 发布产物
+# 打包好的 zip / apk，走 GitHub Release 分发，不进源码树。
+dist/
