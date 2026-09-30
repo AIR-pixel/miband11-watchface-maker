@@ -3,6 +3,7 @@
 watchface-tool/__pycache__/
 watchface-tool/**/__pycache__/
 watchface-android/out/
+watchface-android/.kotlinc/
 __pycache__/
 *.py[cod]
 *.class

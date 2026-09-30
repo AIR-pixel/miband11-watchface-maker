@@ -71,11 +71,27 @@ JPEG 的甜点区在 **q80~q85**：q90 以上体积反超 P64 PNG，而 P64 是�
 ## 环境准备
 
 ```bash
-pip install -r requirements.txt   # Pillow + PyQt5
+pip install -r requirements.txt   # Pillow + tkinterdnd2
 ```
 
 - **处理视频**需要 `ffmpeg`（GIF / 图片不需要）。装好后加入 PATH。
 - **打包 .face** 需要 `Compiler.exe`。见下方「Compiler.exe 自备说明」。
+
+### GUI 用的是 tkinter，不是 Qt
+
+界面用 Python 自带的 **tkinter/ttk**，附带依赖只有 Pillow（约 16 MB）+ tkinterdnd2（约 0.8 MB）。
+早先的版本用 PyQt5，装完之后光是 `PyQt5/` 目录就有 **144 MB**（`opengl32sw.dll` 一个文件 20 MB、
+`Qt5Gui.dll` 7 MB……），而这个工具其实只用到「画一张位图 + 几个矩形 + 十几个标准控件」，
+不值得为它拖一整个 Qt 进来。换掉之后依赖从约 **160 MB 降到约 20 MB**。
+
+顺带的好处：不再有 **GPL v3** 授权顾虑（tkinter 是 PSF 许可，底下的 Tcl/Tk 是 BSD 风格，都无 copyleft 传染）。
+
+代价说清楚：
+
+- 观感比 Qt 朴素一档。Windows 上套 `vista` 主题后接近原生，但控件细节没那么精致。
+- **拖拽依赖 `tkinterdnd2`**（Qt 是原生支持）。没装也能用，只是改用「选择素材」按钮。
+- 高 DPI 需要显式声明进程 DPI 感知（代码里已处理，见 `gui/window.py` 的 `_system_dpi`）。
+  Qt 默认就感知，tk 不是 —— 不处理的话在 150%/200% 缩放的屏幕上是糊的。
 
 ## 使用
 
@@ -134,10 +150,11 @@ watchface_tool/
   quantize.py    压缩等级（调色板量化）
   lua.py         生成 main.lua（序列帧动画 + 时间日期）
   fprj.py        生成 .fprj（UTF-16 XML）
+  face_builder.py 纯代码拼装 .face
   build.py       调用 Compiler.exe + 回写表盘 ID
   pipeline.py    编排
-gui/
-  crop_canvas.py 裁剪预览画布
+gui/                    ← tkinter/ttk
+  crop_canvas.py 裁剪预览画布（tk.Canvas 手绘）
   window.py      主窗口
 main.py          入口（GUI / --cli）
 ```

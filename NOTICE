@@ -50,13 +50,21 @@ Windows 版的打包环节会调用 `Compiler.exe`（小米 Vela IDE 里的表�
 | 组件 | 用在哪 | 许可证 |
 |---|---|---|
 | Pillow | Windows 版 · 解码/量化/编码 | HPND（PIL 许可证） |
-| PyQt5 | Windows 版 · GUI | GPL v3 / 商业双许可 |
+| Tcl/Tk（tkinter） | Windows 版 · GUI | BSD 风格（Tcl/Tk License） |
+| tkinterdnd2 / tkdnd | Windows 版 · 拖拽文件进窗口（可选） | MIT / Tcl 风格 |
 | ffmpeg | Windows 版 · 视频抽帧 | LGPL / GPL（取决于构建） |
+| Kotlin 编译器 / kotlin-stdlib | 安卓版 · 编译界面层 | Apache-2.0 |
+| R8 | 安卓版 · 构建期压缩 | BSD-3-Clause |
 | Android SDK build-tools | 安卓版 · 构建 APK | Android SDK 许可 |
 | Python 标准库 / Java 标准库 | 两端 | PSF / GPL+CE |
 
-> PyQt5 是 **GPL v3 / 商业双许可**。若你打算把 Windows 版做成闭源商业产品分发，
-> 需要自行处理 PyQt5 的授权（改用 PySide6 或购买商业许可）。
+> **关于 GUI 授权**：Windows 版早先用 PyQt5（GPL v3 / 商业双许可），现改用
+> Python 自带的 tkinter（Tcl/Tk License，BSD 风格，无 copyleft 传染）。
+> 顺带把 Windows 侧的附带依赖从约 160 MB 降到约 20 MB。
+>
+> **注意 kotlin-stdlib 会被打进 APK**（Apache-2.0，允许）。不过本项目默认过一遍 R8，
+> 实测 kotlin-stdlib 里的类会被整棵 tree-shake 掉，最终产物里不含任何 `kotlin/*` 类；
+> 即便不用 R8，Apache-2.0 也只要求保留版权声明，不构成 copyleft 约束。
 
 ## 6. 本仓库**不包含**的东西
 

@@ -46,7 +46,7 @@
 2. **体积可控** —— 手环表盘有体积预算（经验值 ≤ 3.5 MB），这个工具让你能精确控制到每一档，
    并且**改参数时实时显示预估体积**，不用反复试。
 3. **安卓版不依赖 Compiler.exe** —— 官方编译器是 x86 Windows 二进制，安卓跑不了。
-   安卓版用纯 Java 按二进制格式直接拼装 `.face`，摆脱了这个依赖。
+   安卓版用**纯代码按二进制格式直接拼装** `.face`，摆脱了这个依赖。
 
 ---
 
@@ -54,8 +54,8 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
-| **安卓** | [watchface-tool-android-v1.0.0.apk](../../releases/latest/download/watchface-tool-android-v1.0.0.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v1.0.0.zip](../../releases/latest/download/watchface-tool-pc-v1.0.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
+| **安卓** | [watchface-tool-android-v1.1.0.apk](../../releases/latest/download/watchface-tool-android-v1.1.0.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
+| **Windows** | [watchface-tool-pc-v1.1.0.zip](../../releases/latest/download/watchface-tool-pc-v1.1.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
 
 > Android 版安装时系统可能提示「未知来源应用」，需要在设置里允许。
 
@@ -165,7 +165,7 @@
 **1. 环境准备**
 
 ```bash
-pip install -r watchface-tool/requirements.txt   # Pillow + PyQt5
+pip install -r watchface-tool/requirements.txt   # Pillow + tkinterdnd2（GUI 用自带的 tkinter，不需要 Qt）
 ```
 
 - 处理**视频**需要 `ffmpeg`（GIF / 图片不需要），装好后加入 PATH。
@@ -194,11 +194,15 @@ python main.py
 
 **1. 安装**
 
-下载 [watchface-tool-android-v1.0.0.apk](../../releases/latest/download/watchface-tool-android-v1.0.0.apk) 安装（Android 7.0+）。
+下载 [watchface-tool-android-v1.1.0.apk](../../releases/latest/download/watchface-tool-android-v1.1.0.apk) 安装（Android 7.0+）。
 
 **2. 操作流程**
 
-界面从上到下依次是：
+界面分两段：
+
+- **上段（可上下滑动）**：选择素材按钮、素材信息、裁剪预览、重置/铺满按钮、裁剪框坐标，
+  以及所有参数（压缩程度 / 帧率 / 编码格式 / 帧数上限 / JPEG 质量 / 起始与时长 / 快放 / 预估行）
+- **下段（固定贴底）**：生成按钮、进度条、状态
 
 1. **选择视频 / 图片** —— 从系统文件选择器挑素材
 2. **裁剪区** —— 拖动移动、拖右下角缩放、双指捏合缩放；下方有「重置裁剪框」「铺满画面」
@@ -210,22 +214,44 @@ python main.py
 8. **预估行** —— 显示「预计 N 帧 @ X fps · 约 Y MB · 播放 Z s」，快放时会额外标出倍速
 9. **生成 .face** —— 产物存到 `Android/data/face.tool/files/faces/`
 
-> 安卓版**不需要 `Compiler.exe`**，它用纯 Java 拼装 `.face`。
+> 「生成」按钮放在滚动区**外面**固定贴底，任何屏幕尺寸/字号下都点得到 ——
+> 旧版把所有控件竖着塞在一屏里，在小屏上按钮会被顶到屏幕外。
+> 裁剪预览用「基准高 + 权重」吃掉富余高度：放得下时参数按自然高度铺开、不留空档，
+> 放不下时预览退到基准高、整页滚动。
+
+> 安卓版**不需要 `Compiler.exe`**，它用纯代码拼装 `.face`。
 
 **从源码自行构建安卓版**（不需要 Android Studio，不需要 Gradle）：
 
 ```bash
 cd watchface-android
+bash fetch_kotlinc.sh    # 首次：拉一套最小 Kotlin CLI（约 62 MB，装在 .kotlinc/，已 gitignore）
 # 需要：Android SDK build-tools（含 aapt2/d8/zipalign/apksigner）+ JDK 17+
 bash build.sh
 ```
 
-脚本流程：`javac → aapt2 link → d8 → 塞 classes.dex → zipalign → apksigner`，产物 `watchface-tool.apk`。
+脚本流程：`aapt2 link → javac(Java) → kotlinc(Kotlin) → R8 → 塞 classes.dex → zipalign → apksigner`，
+产物 `watchface-tool.apk`。
 
-> 构建脚本里有两条容易踩的坑，已处理：
-> 1. `d8.bat` / `apksigner.bat` 靠 **`JAVA_HOME`** 定位 JDK（PATH 里的 `java` 可能是别的版本）——
+> 界面上层是 **Kotlin**，核心算法是 **Java**（零 Android 依赖，桌面 JVM 也能跑）。
+> 两者在手工链里混编，不需要 Gradle。
+>
+> **体积**：Kotlin 会带进 kotlin-stdlib，直接打包 APK 会从 49 KB 涨到 2.1 MB。
+> 脚本默认过一遍 **R8（full mode）**，把 1108 个 `kotlin/*` 类整棵摇掉 ——
+> 实测成品与纯 Java 版**同尺寸**（约 50 KB）。`NOR8=1 bash build.sh` 可跳过压缩换构建速度
+> （约 10 s → 约 50 s）。
+>
+> R8 用的是 Android SDK 自带的 `cmdline-tools/*/lib/r8.jar`，不需要额外下载。
+
+> 构建脚本里有几条容易踩的坑，已处理：
+> 1. `d8.bat` / `apksigner.bat` / R8 靠 **`JAVA_HOME`** 定位 JDK（PATH 里的 `java` 可能是别的版本）——
 >    脚本里显式 `export JAVA_HOME=...`。
 > 2. Git Bash 下 Windows 路径要用 `/c/...` 形式，且 `javac` 用 `--release 8` 才能产出 minSdk 24 能用的字节码。
+> 3. **classpath 用 `;` 拼接时 Git Bash 不做路径转换** —— `/c/...` 形式 Java 认不出来，
+>    症状是 `ClassNotFoundException: org.jetbrains.kotlin.cli.jvm.K2JVMCompiler`（看着像 jar 坏了）。
+>    脚本里一律用 `cygpath -w` 转成 `C:\...`。
+> 4. kotlinc 的 `-no-stdlib` 只是关掉「自动从 kotlin-home 找 stdlib」，**不代表不用 stdlib** ——
+>    还得自己把 `kotlin-stdlib.jar` 写进 `-classpath`，否则满屏 `cannot access built-in declaration 'kotlin.String'`。
 
 ### 命令行
 
@@ -313,11 +339,11 @@ miband11-watchface-maker/
 ├── tools/
 │   ├── verify_face.py          .face 结构检查器（只读）
 │   └── bench_quality.py        体积/画质实测脚本
-├── watchface-tool/             Windows 版（Python + PyQt5）
+├── watchface-tool/             Windows 版（Python + tkinter）
 │   ├── main.py                 入口（GUI / --cli）
 │   ├── gui/
 │   │   ├── window.py           主窗口
-│   │   └── crop_canvas.py      裁剪预览画布
+│   │   └── crop_canvas.py      裁剪预览画布（tk.Canvas 手绘）
 │   └── watchface_tool/
 │       ├── constants.py        常量与格式定义
 │       ├── extract.py          视频/GIF/图片 → 帧序列 + 帧数规划
@@ -328,15 +354,17 @@ miband11-watchface-maker/
 │       ├── face_builder.py     纯代码拼装 .face（不依赖 Compiler.exe）
 │       ├── build.py            调用 Compiler.exe + 回写表盘 ID
 │       └── pipeline.py         编排
-└── watchface-android/          安卓版（纯 Java）
-    ├── build.sh                无 Gradle 构建脚本
+└── watchface-android/          安卓版（Kotlin 界面 + Java 核心）
+    ├── build.sh                无 Gradle 构建脚本（javac + kotlinc + R8）
+    ├── fetch_kotlinc.sh        拉一套最小 Kotlin CLI
+    ├── r8-rules.pro            R8 保留规则
     ├── app/
     │   ├── AndroidManifest.xml
     │   └── src/face/tool/
-    │       ├── MainActivity.java   主界面
-    │       ├── CropView.java       裁剪控件
-    │       └── FaceGenerator.java  编排
-    ├── core/face/              零 Android 依赖的核心算法
+    │       ├── MainActivity.kt  主界面（Kotlin）
+    │       ├── CropView.kt      裁剪控件（Kotlin）
+    │       └── FaceGenerator.java  编排（Java）
+    ├── core/face/              零 Android 依赖的核心算法（Java）
     │   ├── FaceBuilder.java    拼装 .face（与 Python 版逐字节等价）
     │   ├── Quantizer.java      调色板量化（中位切分 + Floyd-Steinberg）
     │   ├── PngEncoder.java     PNG 编码（含调色板）
