@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """纯代码生成 .face（不依赖 Compiler.exe）。
 
+⚠️ **这个模块目前没有调用方，而且只支持无 AOD 的产物。**
+Windows 端的打包一律走 `build.py`（调 Compiler.exe），所以真正在跑的是它。
+这里是 v1.x「摆脱 Compiler.exe」路线的原形，留着当参考；
+带 AOD 的纯代码打包在安卓端（`core/face/FaceBuilder.java`），
+而仓库里那份**跨语言差分回归**的 Python 参考实现在 `tools/diff/reference.py`。
+改这个文件不会影响任何产物 —— 别把它当成生产路径。
+
 .face 二进制格式已完整逆向，逐字节布局见 docs/face格式规范.md。
 此模块把「标题 + ID + 文件列表（PNG/Lua 明文） + 预览位图」按该格式拼装成字节流。
 

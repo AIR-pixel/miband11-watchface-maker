@@ -22,10 +22,23 @@
 - 核心算法放在 `core/face/` 下，**零 Android 依赖**，纯 JavaSE 也能跑
   （`test/face/TestMain.java` 就是这么自测的）
 
-`core/face/FaceBuilder.java` 与 Python 版 `watchface_tool/face_builder.py`
-是**逐字节等价**的两份实现，产物完全一致：
+安卓端这几个模块与 Windows 端是**成对**的实现，仓库里带了**跨语言差分回归**
+（`python tools/diff_face.py`）盯着它们，一边改完跑一次就知道有没有跑偏：
 
-| 产物 | 与官方 `Compiler.exe` 输出对比 |
+| 职责 | 安卓（Java） | Windows（Python） | 用例 |
+|---|---|---|---|
+| `main.lua` 生成 | `core/face/LuaGen.java` | `watchface_tool/lua.py` | 12 |
+| AOD 布局 + 描述块 | `core/face/AodGen.java` | `watchface_tool/aod.py` ＋ `tools/diff/reference.py` | 12 |
+| `.face` 拼装 | `core/face/FaceBuilder.java` | `tools/diff/reference.py` | 21 |
+
+> Windows 端打包仍然走官方 `Compiler.exe`（见 [`build.py`](../watchface-tool/watchface_tool/build.py)），
+> 所以 Python 侧没有生产用的 packer，`tools/diff/reference.py` 是**专为差分而写的参考实现**。
+> 早先文档里说 `watchface_tool/face_builder.py` 是 Java 版的对拍对象 ——
+> 那个文件是 v1.x 留下的原形（**没有 AOD、没有任何调用方**），不是对拍对象。
+
+**与官方 `Compiler.exe` 的一致性**（当时逐字节对拍的结果）：
+
+| 产物 | 与 `Compiler.exe` 输出对比 |
 |---|---|
 | 不带 AOD | **7/7 字节一致** |
 | 带 AOD | **6/6 字节一致** |
@@ -34,6 +47,9 @@
 > 样本集按「能触发哪些分支」设计（帧数 1/2/3/5/8/12；AOD 的空 / 时间 / 时间+日期 /
 > 黑底 / 大字号 / 自定义色）。过程中揪出三个**只在特定样本上才现形**的 bug，
 > 详见 [`docs/项目经验.md`](../docs/项目经验.md) 的 Bug 4/5/6。
+>
+> ⚠️ 这一组数字**无法只靠本仓库重跑** —— 它要 `Compiler.exe` 本体（因授权不分发）
+> 和用它产出的参考样本。仓库里能重跑的是上面那张表的跨语言回归。
 
 ### 语言分工：界面 Kotlin，算法 Java
 

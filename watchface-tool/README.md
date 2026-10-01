@@ -150,7 +150,8 @@ watchface_tool/
   quantize.py    压缩等级（调色板量化）
   lua.py         生成 main.lua（序列帧动画 + 时间日期）
   fprj.py        生成 .fprj（UTF-16 XML）
-  face_builder.py 纯代码拼装 .face
+  aod.py         生成 AOD 息屏子工程（纯控件 XML，零 Lua）
+  face_builder.py 纯代码拼装 .face（**v1.x 原形，没有 AOD、已无调用方**）
   build.py       调用 Compiler.exe + 回写表盘 ID
   pipeline.py    编排
 gui/                    ← tkinter/ttk

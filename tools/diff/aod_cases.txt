@@ -1,0 +1,19 @@
+# AOD 交叉验证用例（Python 真实 build_aod 与 Java AodGen 必须产出相同的控件表与描述记录）
+# 格式（| 分隔，13 字段）：
+#   name | enabled | bgMode | customBg | timeMode | timeY | dateY | color
+#        | timeDigitW | timeDigitH | dateDigitW | dateDigitH | colonW
+# 参考侧调用真实 build_aod 写出 AOD/AOD.fprj + images/，再回读 fprj 解析出控件表，
+# 用真实像素算描述记录 —— 测的是生产路径，不是另写一份镜像。
+
+off_disabled|0|none|0|both|200|300|#FFFFFF|46|64|20|28|12
+empty_enabled|1|none|0|none|200|300|#FFFFFF|46|64|20|28|12
+time_only|1|none|0|time|200|300|#FFFFFF|46|64|20|28|12
+both|1|none|0|both|200|300|#FFFFFF|46|64|20|28|12
+both_black|1|black|0|both|200|300|#FFFFFF|46|64|20|28|12
+both_custom_bg|1|custom|1|both|200|300|#FFFFFF|46|64|20|28|12
+custom_bg_missing|1|custom|0|both|200|300|#FFFFFF|46|64|20|28|12
+big_digits|1|none|0|both|120|380|#00FF00|60|80|30|40|16
+odd_widths|1|black|0|time|7|0|#123456|45|63|19|27|11
+color_short_hex|1|none|0|both|200|300|#0F0|46|64|20|28|12
+color_invalid|1|none|0|both|200|300|notacolor|46|64|20|28|12
+date_only_bottom|1|black|0|both|10|492|#FFFFFF|46|64|20|28|12

@@ -1,0 +1,20 @@
+# LuaGen 交叉验证用例（Python lua.py 与 Java LuaGen.java 必须产出完全相同的字符串）
+# 格式（| 分隔，共 20 字段）：
+#   name | walls(prefix:count:period, ...) | periodMs | ext | showTime | showDate
+#        | timeAlign | timeX | timeY | timeSize | timeColor | timeFmt
+#        | dateAlign | dateX | dateY | dateSize | dateColor | dateFmt
+#        | tapAction | fpsDesc
+# fpsDesc 留空 = 用默认兜底描述。
+
+single_time||42|png|1|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|none|
+default_wall_fallback||42|png|1|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|none|
+three_walls_explicit|face:8:42,w2:4:83,w3:12:42|42|png|1|1|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|none|
+tap_cycle_3walls|face:8:42,w2:4:83,w3:12:42|42|png|1|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|cycle|
+tap_info|face:8:42|42|png|1|1|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|info|
+tap_anim|face:8:42|42|png|0|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|anim|
+tap_cycle_1wall_degrade|face:8:42|42|png|1|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|cycle|
+tap_info_noinfo_degrade|face:8:42|42|png|0|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|info|
+custom_layout|face:8:42|42|png|1|1|BOTTOM_LEFT|-60|400|60|0x00FF00|%H:%M:%S|TOP_RIGHT|40|12|20|0x0000FF|%Y-%m-%d|none|
+jpg_ext|face:24:42,w2:24:42|42|jpg|1|1|CENTER|0|0|36|0xFF8800|%H:%M|BOTTOM_MID|0|-20|14|0x888888|%m/%d|cycle|
+date_only|face:8:42|42|png|0|1|LEFT_MID|4|0|22|0xABCDEF|%H:%M|RIGHT_MID|-4|0|18|0x123456|%d|none|
+desc_custom|face:8:42,w2:8:42|42|png|1|0|TOP_MID|0|30|48|0xFFFFFF|%H:%M|TOP_MID|0|86|16|0xEEEEEE|%m/%d|none|2 张壁纸 / 共 16 帧

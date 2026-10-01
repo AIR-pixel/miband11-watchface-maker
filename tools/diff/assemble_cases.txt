@@ -1,0 +1,36 @@
+# 装配用例：整份 .face 的跨语言逐字节比对（Java FaceBuilder ↔ Python 参考 packer）
+#
+# 格式（| 分隔，5 字段）：
+#   name | hasAod | aodCase | nFiles | extraLastBytes
+#
+# nFiles / extraLastBytes 决定主文件清单（规则见 jvm/DiffMain.java 的 filesFor()，
+# Python 侧 tools/diff/reference.py 的 files_for() 必须与之逐字一致）。
+# extraLastBytes 专门用来把「文件数据区总长的模 4 余数」走遍 0/1/2/3 ——
+# 「尾部只对齐了一半」那个 bug（n=8 看着对、n=12 短 2 字节）就靠这组覆盖。
+#
+# aodCase 为空时写 "-"，且 hasAod 必须为 0。
+
+# ---- 无 AOD ----
+noaod_n1|0|-|1|0
+noaod_n3|0|-|3|0
+noaod_n8|0|-|8|0
+noaod_n12|0|-|12|0
+noaod_n12_pad1|0|-|12|1
+noaod_n12_pad2|0|-|12|2
+noaod_n12_pad3|0|-|12|3
+noaod_n24|0|-|24|0
+
+# ---- 带 AOD（元数据 +88B、索引表后移到 360、末尾多出描述块与素材区）----
+aod_n1_empty|1|empty_enabled|1|0
+aod_n3_time|1|time_only|3|0
+aod_n8_both|1|both|8|0
+aod_n12_both|1|both|12|0
+aod_n12_pad1|1|both|12|1
+aod_n12_pad2|1|both|12|2
+aod_n12_pad3|1|both|12|3
+aod_odd_widths|1|odd_widths|7|0
+aod_big_digits|1|big_digits|5|0
+aod_black_bg|1|both_black|4|0
+aod_custom_bg|1|both_custom_bg|4|0
+aod_custom_missing|1|custom_bg_missing|4|0
+aod_date_only|1|date_only_bottom|6|0
