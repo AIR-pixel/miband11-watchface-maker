@@ -119,7 +119,7 @@ def diff_report(want, got, label_w, label_g):
 
 # ------------------------------------------------------------------ 三个阶段
 
-def stage_lua(java, classes, work, keep):
+def stage_lua(java, classes, work):
     from diff import reference                                    # noqa: PLC0415
     sys.path.insert(0, os.path.join(REPO, "watchface-tool"))
     from watchface_tool.lua import generate_lua                   # noqa: PLC0415
@@ -153,7 +153,7 @@ def stage_lua(java, classes, work, keep):
     return ok, len(cases)
 
 
-def stage_aod(java, classes, work, keep):
+def stage_aod(java, classes, work):
     from diff import reference                                    # noqa: PLC0415
     sys.path.insert(0, os.path.join(REPO, "watchface-tool"))
     from watchface_tool import aod as aod_mod                     # noqa: PLC0415
@@ -192,7 +192,7 @@ def stage_aod(java, classes, work, keep):
     return ok, len(cases)
 
 
-def stage_asm(java, classes, work, keep):
+def stage_asm(java, classes, work):
     from diff import reference                                    # noqa: PLC0415
     sys.path.insert(0, os.path.join(REPO, "watchface-tool"))
     from watchface_tool import aod as aod_mod                     # noqa: PLC0415
@@ -274,7 +274,7 @@ def main():
         failed = []
         for stage in want:
             fn = {"lua": stage_lua, "aod": stage_aod, "asm": stage_asm}[stage]
-            ok, n = fn(java, classes, work, args.keep)
+            ok, n = fn(java, classes, work)
             total_ok += ok
             total += n
             if ok != n:
