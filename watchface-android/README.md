@@ -1,6 +1,9 @@
-# 手环 11 动态表盘制作工具（安卓版）
+# 手环 11 表盘自定义工具（安卓版）
 
-和小米手环 11（212×520，Vela OS）动态表盘生成器。手机端直接出 `.face`，不需要电脑。
+小米手环 11（212×520，Vela OS）的表盘制作与自定义工具。手机端直接出 `.face`，不需要电脑。
+
+除了动态壁纸，还能配**息屏 AOD、主屏时间日期、点击交互、多壁纸** ——
+与 [Windows 版](../README.md)功能对齐。
 
 > 本文件只讲安卓版。**仓库总览（含 Windows 版、配置说明、免责声明）见 [仓库根 README](../README.md)**。
 > `.face` 二进制格式见 [`docs/face格式规范.md`](../docs/face格式规范.md)。
@@ -20,18 +23,32 @@
   （`test/face/TestMain.java` 就是这么自测的）
 
 `core/face/FaceBuilder.java` 与 Python 版 `watchface_tool/face_builder.py`
-是**逐字节等价**的两份实现，产物完全一致。
+是**逐字节等价**的两份实现，产物完全一致：
+
+| 产物 | 与官方 `Compiler.exe` 输出对比 |
+|---|---|
+| 不带 AOD | **7/7 字节一致** |
+| 带 AOD | **6/6 字节一致** |
+
+> 这个结论不是靠肉眼看代码得出的。两边各自跑真实产物再做逐字节差分，
+> 样本集按「能触发哪些分支」设计（帧数 1/2/3/5/8/12；AOD 的空 / 时间 / 时间+日期 /
+> 黑底 / 大字号 / 自定义色）。过程中揪出三个**只在特定样本上才现形**的 bug，
+> 详见 [`docs/项目经验.md`](../docs/项目经验.md) 的 Bug 4/5/6。
 
 ### 语言分工：界面 Kotlin，算法 Java
 
-- **`app/src/face/tool/` 下的界面层是 Kotlin**（`MainActivity.kt` / `CropView.kt`）——
+- **`app/src/face/tool/` 下的界面层是 Kotlin**（`MainActivity.kt` / `CropView.kt` / `AodPreviewView.kt`）——
   几百行命令式构建 View 的代码，Kotlin 的 `apply`、lambda、SAM 转换能省掉一大截样板。
-- **`core/face/` 和 `FaceGenerator.java` 保持 Java** —— 这部分已经逐字节验证过，
+- **`core/face/` 和 `FaceGenerator.java` / `AodRenderer.java` 保持 Java** —— 这部分已经逐字节验证过，
   没有理由为了语言统一去冒重写的风险；而且它零 Android 依赖，桌面 JVM 也能编。
+  AOD 也按同样思路拆开：`core/face/AodGen.java` 是**纯逻辑**（布局规划 + 描述记录推导 +
+  体积预估，可对拍），屏幕绘制才落到 `app/src/face/tool/AodRenderer.java`。
 
-**Kotlin 会不会让 APK 变大？** 这是上 Kotlin 前最该问的问题，实测结论是**不会**：
+**Kotlin 会不会让 APK 变大？** 这是上 Kotlin 前最该问的问题，实测结论是**不会**。
 
-| 构建 | classes.dex | APK |
+下面三行是 v1.1.0 时为回答这个问题专门量的（同一份界面分别用三种方式构建）：
+
+| 构建（v1.1.0 界面） | classes.dex | APK |
 |---|---|---|
 | 纯 Java | 42,208 B | 49,555 B |
 | Kotlin，直接 d8（不过滤） | 2,149,124 B | 2,158,995 B |
@@ -39,36 +56,67 @@
 
 不压缩时 kotlin-stdlib 会带进 **1108 个 `kotlin/*` 类**、APK 涨 2.06 MB；
 过一遍 R8 后这些类**全部被 tree-shake 掉（归零）**，dex 里只剩 `face/tool/*`。
-剩下的 4 KB 差值是新界面本身变多了（新增标题行、滚动容器），不是 stdlib 的账。
+
+当前 v2.0.0（多了 AOD / 多壁纸 / 第二页）：
+
+| 构建 | classes.dex | APK |
+|---|---|---|
+| v1.1.0（Kotlin + R8） | 42,696 B | 53,651 B |
+| **v2.0.0（Kotlin + R8）** | **79,448 B** | **90,515 B** |
+
+涨的这 37 KB 全部是**新功能自己的代码**（AOD 记录推导、AOD 预览绘制、多壁纸、第二页 UI），
+不是 stdlib 的账 —— 每次发版都复查一遍：dex 里 `Lkotlin/*` 的出现次数**仍然是 0**。
 
 ## 安装
 
-下载 [watchface-tool-android-v1.1.0.apk](../../releases/latest/download/watchface-tool-android-v1.1.0.apk)。
+下载 [watchface-tool-android-v2.0.0.apk](../../releases/latest/download/watchface-tool-android-v2.0.0.apk)。
 
 - 系统要求：**Android 7.0+**（minSdk 24 / targetSdk 34）
 - 安装时系统可能提示「未知来源应用」，需在设置里允许
-- 包名 `face.tool`，launcher 名「表盘制作」
+- 包名 `face.tool`，launcher 名「表盘制作」，APK 内版本 `2.0`（versionCode 200）
 
 ## 使用
 
-界面从上到下：
+顶部是两个页签，底部「生成 .face」固定贴底。
+
+### 页签 ① 动态壁纸
 
 | 位置 | 控件 | 说明 |
 |---|---|---|
 | 1 | **选择视频 / 图片** | 系统文件选择器；视频、GIF、图片都可以 |
 | 2 | **裁剪区** | 拖动移动 · 拖右下角缩放 · 双指捏合缩放 |
 | 3 | 重置裁剪框 / 铺满画面 | 下方两个按钮 |
-| 4 | **压缩程度** | 6 档：高画质 RGB / 均衡 P256 / 小体积 P128 / 极限 P64 / 极小 P32 / 微缩 P16 |
-| 5 | **帧率** | 7 档：6 / 8 / 12 / 16 / 20 / 24 / 30 FPS |
-| 6 | **编码格式** | PNG（无损）/ JPEG（有损·更小） |
-| 7 | **帧数上限** | 7 档：32 / 48 / 64 / 96 / 128 / 192 / 240 帧 |
-| 8 | **JPEG 质量** | 5 档：q90 / q85 / q80 / q70 / q60（**仅当选了 JPEG 时可点**，选 PNG 时置灰） |
-| 9 | **起始 / 时长** | 单位秒；时长留空 = 取到结尾 |
-| 10 | **保持帧率、压缩时长（快放）** | 见下 |
-| 11 | **预估行** | 「预计 N 帧 @ X fps · 约 Y MB · 播放 Z s」，快放时额外标出倍速 |
-| 12 | **生成 .face** | 产物存到 `Android/data/face.tool/files/faces/` |
+| 4 | **多壁纸** | 「＋ 添加一张壁纸」，最多 8 张；列表里每张可单独删除 |
+| 5 | **压缩程度** | 6 档：高画质 RGB / 均衡 P256 / 小体积 P128 / 极限 P64 / 极小 P32 / 微缩 P16 |
+| 6 | **帧率** | 7 档：6 / 8 / 12 / 16 / 20 / 24 / 30 FPS |
+| 7 | **编码格式** | PNG（无损）/ JPEG（有损·更小） |
+| 8 | **每张帧数上限** | 7 档：32 / 48 / 64 / 96 / 128 / 192 / 240 帧（**按每张壁纸算**） |
+| 9 | **JPEG 质量** | 5 档：q90 / q85 / q80 / q70 / q60（**仅当选了 JPEG 时可点**，选 PNG 时置灰） |
+| 10 | **起始 / 时长** | 单位秒；时长留空 = 取到结尾 |
+| 11 | **保持帧率、压缩时长（快放）** | 见下 |
+| 12 | **预估行** | 「N 张 / 共 N 帧 · 约 X MB（含固定开销 431KB）」 |
 
-界面分两段：素材 + 裁剪预览 + 第 4~11 项一起装在 `ScrollView` 里，
+> 第 4 项加的额外壁纸**沿用同一套帧率 / 压缩 / 时长参数**，裁切固定用「全高居中」——
+> 一张张单独配参数会让这个页面长到没法用。
+
+### 页签 ② 功能自定义
+
+| 位置 | 控件 | 说明 |
+|---|---|---|
+| 1 | **主屏 · 时间 / 日期** | 各自可开关；对齐位置 9 种（左上…右下）、X/Y 偏移、字号、颜色、格式 |
+| 2 | **点击表盘** | 短按行为：无 / 切换壁纸 / 显隐时间日期 / 暂停动画 |
+| 3 | **息屏显示（AOD）** | 开关；底图（无 / 纯黑 / 自定义图片）；显示内容（不显示 / 时间 / 时间+日期）；时间行与日期行的 Y；颜色 |
+| 4 | **AOD 预览 + 预估** | 按当前配置实时画出息屏画面，并给出「约 N KB」 |
+| 5 | **生成 .face** | 产物存到 `Android/data/face.tool/files/faces/` |
+
+**关于 AOD**：不做 AOD 的话，**息屏时手环会停在动画的最后一帧**（真机实测），
+所以想省电就得开。AOD 屏**不能跑 Lua**，时间和日期走系统数据源控件，
+因此 AOD 上的字体是系统字体的粗体，与 Windows 版的 Arial Bold 有细微差别。
+
+**关于「跳转系统 App」**：**做不到，本工具不提供。** 实测在 `DeviceType=466`（手环 10/11）下
+编译器完全忽略 `btn[...]` 控件名语义，Lua 侧也没有对外跳转的 API。详见[根 README](../README.md)。
+
+界面结构：两个页签各是一个 `ScrollView`，
 **「生成」按钮那一行在 `ScrollView` 外面**固定贴底 —— 这样它在任何屏幕尺寸/字号下
 都不会被挤出屏幕。详见下方[界面实现](#界面实现)。
 
@@ -193,41 +241,60 @@ watchface-android/
 ├── app/
 │   ├── AndroidManifest.xml
 │   └── src/face/tool/
-│       ├── MainActivity.kt     主界面与参数编排（Kotlin）
+│       ├── MainActivity.kt     主界面（两页签）与参数编排（Kotlin）
 │       ├── CropView.kt         裁剪控件（拖动/角点缩放/双指缩放，Kotlin）
+│       ├── AodPreviewView.kt   息屏画面预览（自绘 View，Kotlin）
+│       ├── AodRenderer.java    把 AOD 布局画成位图（Canvas / Typeface）
 │       └── FaceGenerator.java  抽帧 → 裁切 → 量化 → 编码 → 拼装（Java）
 ├── core/face/                  零 Android 依赖的核心算法
-│   ├── FaceBuilder.java        拼装 .face 字节流
+│   ├── FaceBuilder.java        拼装 .face 字节流（含 AOD 描述块与素材区）
 │   ├── Quantizer.java          调色板量化（中位切分 + Floyd-Steinberg 抖动）
 │   ├── PngEncoder.java         PNG 编码（含调色板写入）
+│   ├── AodGen.java             AOD 纯逻辑：布局规划 / 描述记录推导 / 体积预估
 │   └── LuaGen.java             生成 main.lua
 └── test/face/                  核心算法自测（纯 JavaSE，可直接 java 运行）
 ```
 
-`core/` 下的四个类不 import 任何 `android.*`，可以单独抽出来复用。
+`core/` 下的类不 import 任何 `android.*`，可以单独抽出来复用。
+AOD 刻意拆成两半：**`AodGen` 纯逻辑、`AodRenderer` 才碰 Canvas** ——
+这样"布局算得对不对"能在桌面 JVM 上和 PC 端 Python 参考实现逐字段对拍，不用装安卓。
 
 ## 界面实现
 
 界面是**纯代码构建**的（`MainActivity.buildUi()`），没有 layout XML ——
 为了少一层资源编译依赖，构建链更简单。
 
-布局分两段，目的是**让「生成」按钮在任何屏幕尺寸和字号下都点得到**：
+模块结构：
 
-| 段 | 内容 | 是否滚动 |
-|---|---|---|
-| 上 | 选择素材、素材信息、裁剪预览、重置/铺满、裁剪框坐标、全部参数 + 体积预估 | **可滑动** |
-| 下 | 生成按钮、进度条、状态 | 固定 |
+```
+root(LinearLayout, VERTICAL)
+├── 页签条                                  dp(42)，两个按钮
+├── pages(LinearLayout, height=0, weight=1)  ← 富余高度在这一层
+│   ├── ScrollView#1  (基本壁纸页)            ← 同时只 VISIBLE 一个
+│   └── ScrollView#2  (功能自定义页)              GONE 的那个不占高度
+└── 生成按钮 + 进度条 + 状态                  固定贴底
+```
 
-三个关键点，改布局时别弄丢：
+这样做的目的是**让「生成」按钮在任何屏幕尺寸和字号下都点得到** —— 它自始至终在
+两个 `ScrollView` 外面。
+
+四个关键点，改布局时别弄丢：
 
 1. **「生成」按钮必须在 `ScrollView` 外面。** 早先所有控件竖着塞进一个
    `LinearLayout`，参数一多按钮就被顶出屏幕外，小屏必现。
-2. **裁剪预览用「基准高 + `weight=1`」**（`dp(130)` + 权重）。
+2. **页签切换用 `GONE`，不要用 `INVISIBLE`。** `LinearLayout` 测量时**跳过 `GONE` 的子 View**，
+   所以「两页各带 `weight=1`、同时只显示一个」是成立的：可见那页独占全部富余高度。
+   换成 `INVISIBLE` 就变成两页各分一半，两页都会莫名出现滚动条。
+   （不需要 ViewPager —— 页签条 + 两个 `ScrollView` 零依赖、零第三方库，R8 之后一个类都不多。）
+3. **裁剪预览与 AOD 预览用「基准高 + `weight=1`」**（分别 `dp(120)` / `dp(220)` + 权重）。
    屏幕放得下时它把富余高度全部吃掉，参数按自然高度排下来，中间不留空档；
-   放不下时它退到基准高，整页滚动。配合 `ScrollView.isFillViewport = true`
+   放不下时退到基准高，整页滚动。配合 `ScrollView.isFillViewport = true`
    —— LinearLayout 第二趟测量才会拿到精确高度，`weight` 才生效。
-   （曾经把预览固定成屏高 30%，结果富余空间全变成参数区和生成按钮之间的空档。）
-3. **两栏参数的 `LayoutParams` 高度必须是 `WRAP_CONTENT`。** 里面是
+
+   > 实测提醒：功能自定义页内容高约 1396 dp，而 1080×2400@2.75 的滚动区只有 636 dp，
+   > **这类设置页永远拿不到富余** —— weight 在这里是"防呆护栏"（矮屏/横屏不塌），
+   > 不是填充器。想让页变短只能减行数。
+4. **两栏参数的 `LayoutParams` 高度必须是 `WRAP_CONTENT`。** 里面是
    「小标题 + 控件」两层，写死高度会把两层压扁，参数挤成一团 —— 这个坑踩过一次。
 
 `CropView` 在 `ACTION_DOWN` 时调了 `requestDisallowInterceptTouchEvent(true)`，

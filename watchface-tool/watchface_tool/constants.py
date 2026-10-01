@@ -56,3 +56,104 @@ JPG_SUBSAMPLING = 0
 
 # 帧率档位
 FPS_OPTIONS = [30, 24, 20, 16, 12, 8, 6]
+
+
+# ============================================================================
+# 表盘功能自定义（fprj 控件层）—— 2026-10-01 实测
+# ============================================================================
+#
+# 【关键前提】Lua 表盘的 `.fprj` 只有一个 Shape=34 全透明挂载点，
+# 主屏的一切（时间/日期/点击交互）都由 Lua 决定，改 fprj 没用。
+# 但 **息屏屏（AOD）不支持 Lua**（实测：AOD.fprj 里写 Shape=34，其 lua 不入包），
+# 所以 AOD 的时间/日期必须走 fprj 控件层的数据源绑定。
+
+# ---------------------------------------------------------------------------
+# 数据源 ID（fprj 的 Value_Src 字段）
+#
+# 来源：Mi-Create（ooflet/Mi-Create）src/data/sources.json 里 `xiaomi_band_10` 一栏，
+# 即本工具使用的 DeviceType=466 对应的机型。ID 是**十六进制字面量去掉 0x 与前置零**。
+# 该字段编译器只存数字、不校验语义，由设备侧 dataman 在运行期解析。
+DATA_SOURCES = {
+    "hour":      "0811",   # 时 0-23（两位整体）
+    "hour_high": "1000911",
+    "hour_low":  "0911",
+    "minute":    "1011",   # 分 0-59（两位整体）
+    "minute_high": "1211",
+    "minute_low":  "1111",
+    "second":    "1811",
+    "day":       "1812",   # 日
+    "day_high":  "1001912",
+    "day_low":   "1912",
+    "month":     "1012",   # 月
+    "week":      "2012",   # 0=周日
+    "year":      "0812",
+    "ampm":      "0813",
+    "battery":   "0841",
+    "steps":     "0821",
+    "calorie":   "0823",
+    "heart":     "0822",
+    "weather":   "3031",
+    "temp":      "2031",
+}
+
+# ---------------------------------------------------------------------------
+# 位置：LVGL 对齐枚举 + 附加像素偏移。
+# 主屏走 Lua 的 lvgl.ALIGN.*；AOD 走 fprj 的 X/Y 绝对坐标（都归一化成这 9 个位置选）。
+ALIGN_KEYS = [
+    "TOP_LEFT", "TOP_MID", "TOP_RIGHT",
+    "LEFT_MID", "CENTER", "RIGHT_MID",
+    "BOTTOM_LEFT", "BOTTOM_MID", "BOTTOM_RIGHT",
+]
+ALIGN_LABELS = {
+    "TOP_LEFT": "左上", "TOP_MID": "上中", "TOP_RIGHT": "右上",
+    "LEFT_MID": "左中", "CENTER": "居中", "RIGHT_MID": "右中",
+    "BOTTOM_LEFT": "左下", "BOTTOM_MID": "下中", "BOTTOM_RIGHT": "右下",
+}
+
+# ---------------------------------------------------------------------------
+# 点击交互（全部走 Lua 层，表盘内生效）
+TAP_ACTIONS = {
+    "none":  {"label": "无（不响应点击）"},
+    "cycle": {"label": "切换壁纸（多张壁纸轮换）"},
+    "info":  {"label": "显示 / 隐藏时间日期"},
+    "anim":  {"label": "暂停 / 继续动画"},
+}
+
+# ---------------------------------------------------------------------------
+# AOD（息屏显示）配置
+#
+# 实测代价模型（AOD 屏，逐项差分）：
+#   AOD 空屏          +88 B
+#   每个 Shape=30     w*h*4 + 60 B
+#   每个 Shape=32     图宽*图高*4 * 图数   ← 多控件共用同一 BitmapList 会去重
+# 参考量级：46x64 的时分数字（共 11 张图）≈ 126 KB；20x28 的日期 ≈ 24 KB。
+#
+# ⚠️ 主屏上的 Shape=30 会被合成为整屏位图（+441 KB/个），AOD 屏不会 —— 
+#    这也是"AOD 加小图很便宜、主屏加小控件很贵"的原因。
+AOD_BG_MODES = {
+    "none":   {"label": "无底图（靠屏幕黑底，不额外占体积）"},
+    "black":  {"label": "纯黑底图（+431 KB，最保险）"},
+    "custom": {"label": "自定义图片（+431 KB）"},
+}
+
+AOD_TIME_MODES = {
+    "none": {"label": "不显示"},
+    "time": {"label": "只显示时间"},
+    "both": {"label": "时间 + 日期"},
+}
+
+# 数字位图默认尺寸（像素/单个数字）
+AOD_TIME_DIGIT_W = 46
+AOD_TIME_DIGIT_H = 64
+AOD_DATE_DIGIT_W = 20
+AOD_DATE_DIGIT_H = 28
+AOD_COLON_W = 12          # 时与分之间的冒号（Shape=30 静态图）
+
+# 默认字体：Windows 自带的 Arial Bold；找不到就退回 PIL 内置位图字体。
+AOD_FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\segoeuib.ttf",
+    r"C:\Windows\Fonts\arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+]

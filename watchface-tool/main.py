@@ -35,13 +35,43 @@ def _cli(argv):
     p.add_argument("--id", default=None, help="表盘 ID（数字，省略自动生成）")
     p.add_argument("--compiler", required=True, help="Compiler.exe 路径")
     p.add_argument("--out", default=None, help="输出目录")
-    p.add_argument("--no-time", action="store_true", help="不叠加时间日期")
+    p.add_argument("--no-time", action="store_true", help="不叠加时间")
+    # ---- 功能自定义 ----
+    p.add_argument("--date", action="store_true", help="叠加日期（默认只叠加时间）")
+    p.add_argument("--date-fmt", default="%m/%d", help="日期 strftime 格式，默认 %%m/%%d")
+    p.add_argument("--time-fmt", default="%H:%M", help="时间 strftime 格式，默认 %%H:%%M")
+    p.add_argument("--time-pos", default="TOP_MID", help="时间位置（LVGL 对齐名，如 TOP_MID）")
+    p.add_argument("--time-ofs", default="0,30", help="时间像素偏移 dx,dy")
+    p.add_argument("--time-size", type=int, default=48, help="时间字号")
+    p.add_argument("--time-color", default="FFFFFF", help="时间颜色 RRGGBB")
+    p.add_argument("--date-pos", default="TOP_MID", help="日期位置")
+    p.add_argument("--date-ofs", default="0,86", help="日期像素偏移 dx,dy")
+    p.add_argument("--date-size", type=int, default=16, help="日期字号")
+    p.add_argument("--date-color", default="EEEEEE", help="日期颜色 RRGGBB")
+    p.add_argument("--tap", default="none", choices=["none", "cycle", "info", "anim"],
+                   help="短按表盘：none 无 / cycle 切换壁纸 / info 显隐时间日期 / anim 暂停动画")
+    p.add_argument("--wall", action="append", default=[],
+                   help="额外壁纸路径（可重复）；沿用主素材的参数")
+    p.add_argument("--aod", action="store_true", help="生成息屏显示（AOD）子工程")
+    p.add_argument("--aod-bg", default="none", choices=["none", "black", "custom"],
+                   help="AOD 底图：none 靠屏幕黑底（不占体积）/ black 纯黑 / custom 自定义")
+    p.add_argument("--aod-bg-image", default=None, help="--aod-bg custom 时的图片路径")
+    p.add_argument("--aod-content", default="time", choices=["none", "time", "both"],
+                   help="AOD 显示内容：none / time 时间 / both 时间+日期")
+    p.add_argument("--aod-time-y", type=int, default=200, help="AOD 时间行 Y")
+    p.add_argument("--aod-date-y", type=int, default=300, help="AOD 日期行 Y")
+    p.add_argument("--aod-color", default="#FFFFFF", help="AOD 数字颜色 #RRGGBB")
+    p.add_argument("--aod-font", default=None, help="AOD 数字字体 TTF 路径")
     args = p.parse_args(argv)
 
     crop_box = None
     if args.crop:
         crop_box = tuple(int(x) for x in args.crop.split(","))
         assert len(crop_box) == 4
+
+    def _ofs(s):
+        a, b = s.split(",")
+        return (int(a), int(b))
 
     r = pipeline.generate_face(
         source_path=args.src,
@@ -52,6 +82,29 @@ def _cli(argv):
         face_id=args.id,
         compiler_exe=args.compiler,
         show_time=not args.no_time,
+        show_date=args.date,
+        time_align=args.time_pos,
+        time_ofs=_ofs(args.time_ofs),
+        time_size=args.time_size,
+        time_color=int(args.time_color.lstrip("#"), 16),
+        time_fmt=args.time_fmt,
+        date_align=args.date_pos,
+        date_ofs=_ofs(args.date_ofs),
+        date_size=args.date_size,
+        date_color=int(args.date_color.lstrip("#"), 16),
+        date_fmt=args.date_fmt,
+        tap_action=args.tap,
+        extra_walls=[(w, None) for w in args.wall],
+        aod={
+            "enabled": args.aod,
+            "bg_mode": args.aod_bg,
+            "bg_image": args.aod_bg_image,
+            "time_mode": args.aod_content,
+            "time_y": args.aod_time_y,
+            "date_y": args.aod_date_y,
+            "color": args.aod_color,
+            "font_path": args.aod_font,
+        },
         output_dir=args.out,
         clip_start=args.clip_start,
         clip_dur=args.clip_dur,
@@ -69,8 +122,15 @@ def _cli(argv):
     elif getattr(r, "play_seconds", 0):
         speed_txt = f" · 播放 {r.play_seconds:.1f}s"
     fmt_txt = "PNG" if r.fmt == "png" else f"JPEG q{r.jpg_quality}"
+    extra = []
+    if getattr(r, "n_walls", 1) > 1:
+        extra.append(f"{r.n_walls} 张壁纸")
+    if getattr(r, "aod_enabled", False):
+        extra.append(f"AOD +{r.aod_bytes / 1024:.0f} KB")
+    extra_txt = (" · " + " · ".join(extra)) if extra else ""
     print(f"{r.n_frames} 帧 @ {r.effective_fps:.1f}fps · "
-          f"{r.face_size / 1048576:.2f} MB · {r.level_label} · {fmt_txt}{speed_txt}")
+          f"{r.face_size / 1048576:.2f} MB · {r.level_label} · {fmt_txt}"
+          f"{speed_txt}{extra_txt}")
 
 
 def main():
