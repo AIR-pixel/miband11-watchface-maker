@@ -32,6 +32,10 @@ class AodPreviewView(ctx: Context) : View(ctx) {
     var bgBitmap: Bitmap? = null
         set(v) { field = v; invalidate() }
 
+    /** 手环屏幕之外的底色（跟随动态取色）。 */
+    var frameColor: Int = Color.BLACK
+        set(v) { field = v; invalidate() }
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         textAlign = Paint.Align.LEFT
@@ -56,7 +60,7 @@ class AodPreviewView(ctx: Context) : View(ctx) {
         canvas.translate(ox, oy)
         canvas.scale(s, s)
 
-        canvas.drawColor(Color.BLACK)                       // 屏外留白
+        canvas.drawColor(frameColor)                        // 屏外留白
         canvas.drawRect(0f, 0f, SW, SH, Paint().apply {
             color = if (c.enabled) Color.rgb(8, 8, 10) else Color.rgb(20, 20, 22)
         })

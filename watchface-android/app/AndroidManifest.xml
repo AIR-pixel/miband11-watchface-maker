@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="face.tool"
-    android:versionCode="200"
-    android:versionName="2.0">
+    android:versionCode="210"
+    android:versionName="2.1">
 
     <application
         android:label="表盘制作"
         android:icon="@android:drawable/ic_menu_gallery"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -55,6 +55,19 @@ class CropView(context: Context) : View(context) {
             }
         })
 
+    /** 裁剪框/手柄的颜色（跟随动态取色）。 */
+    var accent: Int = Color.rgb(0, 190, 255)
+        set(v) {
+            field = v
+            borderPaint.color = v
+            handlePaint.color = v
+            invalidate()
+        }
+
+    /** 无素材时的底色。 */
+    var frameColor: Int = Color.rgb(40, 40, 40)
+        set(v) { field = v; invalidate() }
+
     private val dimPaint = Paint().apply { color = 0x99000000.toInt() }
     private val borderPaint = Paint().apply {
         color = Color.rgb(0, 190, 255)
@@ -264,7 +277,7 @@ class CropView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.rgb(40, 40, 40))
+        canvas.drawColor(frameColor)
         val s = src ?: return
         canvas.drawBitmap(s, null, imgRect, null)
 

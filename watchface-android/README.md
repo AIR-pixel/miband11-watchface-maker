@@ -73,7 +73,7 @@
 不压缩时 kotlin-stdlib 会带进 **1108 个 `kotlin/*` 类**、APK 涨 2.06 MB；
 过一遍 R8 后这些类**全部被 tree-shake 掉（归零）**，dex 里只剩 `face/tool/*`。
 
-当前 v2.0.0（多了 AOD / 多壁纸 / 第二页）：
+v2.0.0（多了 AOD / 多壁纸 / 第二页）：
 
 | 构建 | classes.dex | APK |
 |---|---|---|
@@ -83,9 +83,54 @@
 涨的这 37 KB 全部是**新功能自己的代码**（AOD 记录推导、AOD 预览绘制、多壁纸、第二页 UI），
 不是 stdlib 的账 —— 每次发版都复查一遍：dex 里 `Lkotlin/*` 的出现次数**仍然是 0**。
 
+v2.1.0（界面换成卡片式 Material 3 + 动态取色）：
+
+| 构建 | classes.dex | APK |
+|---|---|---|
+| **v2.1.0（Kotlin + R8）** | **92,224 B** | **102,803 B** |
+
+再涨的 12.3 KB 是 `Mat.kt`（控件工厂）+ `Palette.kt`（颜色角色）与重排后的布局代码，
+`Lkotlin/*` 复查**仍为 0**。
+
+## 界面：Material You 动态取色（依然零依赖）
+
+界面是 Material 3 风格，配色**跟随系统主题色**，但没有引 Material Components ——
+因为它能用的那套东西，framework 从 Android 12 起就自己提供了：
+
+- **取色来自系统**。API 31 起系统把壁纸提取的调色板做成 framework 资源
+  （`@android:color/system_accent1_600` 这一族，13 档 `0…1000`）。代码里**按名字查**
+  （`getIdentifier(name, "color", "android")`），查不到就整套退回 M3 baseline 蓝
+  （`#0B57D0` 系）—— 所以 API 24~30 的机器上是固定配色，不会崩。
+  档位索引 = 色调 × 10 反过来（`0`≈白、`1000`≈黑），浅色取 `*_600`、深色取 `*_200` 是
+  Google 自己的映射，别随手换档，对比度会崩。
+- **深浅跟随系统夜间模式**，顶栏右侧还能手动切「浅色 / 深色 / 跟随系统」三态。
+  三态只影响本 App（写 SharedPreferences 后 `recreate()`），**不动系统设置** ——
+  改系统夜间模式要 `CHANGE_CONFIGURATION` 权限，普通应用拿不到。
+- **控件全是代码画的**。项目没有 `res/` 目录：圆角/描边/填充用 `GradientDrawable`，
+  按压反馈用 `RippleDrawable`，下拉菜单用 framework 自带的 `ListPopupWindow`
+  （比 Spinner 的旧箭头干净得多），进度条用 `ClipDrawable` 拼 M3 的圆角轨道。
+  皮肤集中在 `app/src/face/tool/Palette.kt`（颜色角色）与 `Mat.kt`（控件工厂）。
+- **窗口/状态栏/导航栏一起并到当前配色**（`Mat.tintWindow`），否则切深色时四周留一圈白边。
+
+配色改动的验收靠**无设备 dp 账 + 线框渲染**，不是装在手机上反复试。实测结果：
+
+| 屏（dp 高） | 页 1 内容 / 滚动区 | 页 2 内容 / 滚动区 |
+|---|---|---|
+| 1080×2400@2.75（→777） | 1052 / 561 dp | 1436 / 561 dp |
+| 1080×1920@2.75（→602） | 1052 / 386 dp | 1436 / 386 dp |
+
+> 页 1 按**满态**算（3 张额外壁纸）。两页在所有屏上都需要滑动 —— 参数密集的设置页天然比视口高，
+> 弹性区（裁剪 / AOD 预览）在这里是**防呆护栏**（矮屏、横屏、分屏时不出现空档、预览不塌），
+> 不是「填充器」。真正被保证的是**底部生成按钮永远完整可见**。
+
+> ⚠️ 这次用的两个验收脚本（dp 账线框渲染、baseline 配色 WCAG 对比度）都是**一次性工具，
+> 没进仓库**，所以上面这两组数字**无法只靠本仓库重跑**。
+> baseline 对比度当时的实测：浅色 10 组里最小 1.61（分隔线）/ 正文对最小 6.39；
+> 深色最小 1.99 / 6.27，全部达标。
+
 ## 安装
 
-下载 [watchface-tool-android-v2.0.0.apk](../../releases/latest/download/watchface-tool-android-v2.0.0.apk)。
+下载 [watchface-tool-android-v2.1.0.apk](../../releases/latest/download/watchface-tool-android-v2.1.0.apk)。
 
 - 系统要求：**Android 7.0+**（minSdk 24 / targetSdk 34）
 - 安装时系统可能提示「未知来源应用」，需在设置里允许
@@ -93,7 +138,7 @@
 
 ## 使用
 
-顶部是两个页签，底部「生成 .face」固定贴底。
+顶部是标题栏（右侧为主题切换）＋ 两个页签，底部「生成表盘」固定贴底。
 
 ### 页签 ① 动态壁纸
 
