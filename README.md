@@ -14,6 +14,7 @@
 
 - [它解决什么问题](#它解决什么问题)
 - [下载](#下载)
+- [界面截图](#界面截图)
 - [功能](#功能)
 - [各项配置说明](#各项配置说明)
 - [功能自定义详解](#功能自定义详解)
@@ -61,6 +62,33 @@
 | **Windows** | [watchface-tool-pc-v2.1.0.zip](../../releases/latest/download/watchface-tool-pc-v2.1.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
 
 > Android 版安装时系统可能提示「未知来源应用」，需要在设置里允许。
+
+---
+
+## 界面截图
+
+### Windows 版
+
+**页面 1「动态壁纸」** —— 左侧框选裁剪，右侧调压缩 / 帧率 / 帧数上限，底部实时体积预估：
+
+![Windows 版页面 1：动态壁纸](docs/images/win-1-wallpaper.png)
+
+**页面 2「功能自定义」** —— AOD 预览、主屏时间日期、点击交互、多壁纸：
+
+![Windows 版页面 2：功能自定义](docs/images/win-2-function.png)
+
+### 安卓版
+
+Material 3 界面，配色跟随系统（Android 12+ 从壁纸取色，低版本退回基线蓝），深浅跟随系统：
+
+![安卓版界面（浅色）](docs/images/android-light.png)
+
+![安卓版界面（深色）](docs/images/android-dark.png)
+
+> 安卓版这两张是**按源码里的 dp 与配色参数离线重绘**的效果图，不是真机截图。
+> 安卓版界面已在真机上验证过可用，但开发环境没有安卓设备，截图只能靠重绘得出 ——
+> 布局与配色是照 `MainActivity.kt` / `Palette.kt` 逐项算出来并校验过的
+> （见 [项目经验](./docs/项目经验.md)）。Windows 版那两张是真机运行截图。
 
 ---
 
@@ -508,7 +536,12 @@ miband11-watchface-maker/
 ├── docs/
 │   ├── face格式规范.md          .face 二进制格式（逆向所得，完整字段表）
 │   ├── 体积与画质实测.md        全部实测数据（AOD 开销与差分数据为一次性实验，脚本未随仓库发布）
-│   └── 项目经验.md             踩过的坑、结论、方法论
+│   ├── 项目经验.md             踩过的坑、结论、方法论
+│   └── images/                 README 里的界面截图
+│       ├── win-1-wallpaper.png    Windows 页面 1（真机运行截图）
+│       ├── win-2-function.png     Windows 页面 2（真机运行截图）
+│       ├── android-light.png      安卓版浅色（按源码 dp 与配色离线重绘）
+│       └── android-dark.png       安卓版深色（同上）
 ├── tools/
 │   ├── verify_face.py          .face 结构检查器（只读，认得 AOD 产物的布局）
 │   ├── bench_quality.py        体积/画质实测脚本
