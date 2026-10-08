@@ -58,8 +58,8 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
-| **安卓** | [watchface-tool-android-v2.1.0.apk](../../releases/latest/download/watchface-tool-android-v2.1.0.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v2.1.0.zip](../../releases/latest/download/watchface-tool-pc-v2.1.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
+| **安卓** | [watchface-tool-android-v2.1.1.apk](../../releases/latest/download/watchface-tool-android-v2.1.1.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
+| **Windows** | [watchface-tool-pc-v2.1.1.zip](../../releases/latest/download/watchface-tool-pc-v2.1.1.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
 
 > Android 版安装时系统可能提示「未知来源应用」，需要在设置里允许。
 
@@ -352,7 +352,7 @@ python main.py
 
 **1. 安装**
 
-下载 [watchface-tool-android-v2.1.0.apk](../../releases/latest/download/watchface-tool-android-v2.1.0.apk) 安装（Android 7.0+）。
+下载 [watchface-tool-android-v2.1.1.apk](../../releases/latest/download/watchface-tool-android-v2.1.1.apk) 安装（Android 7.0+）。
 
 **2. 操作流程**
 

@@ -222,22 +222,51 @@ class Mat(private val ctx: Context) {
         return ld
     }
 
-    /** 把窗口底色/状态栏/导航栏都并到当前配色上，否则切深色时四周会留一圈白边。 */
+    /** 把窗口底色/状态栏/导航栏颜色并到当前配色上，否则切深色时四周会留一圈白边。
+     *  **只上色，不碰图标明暗** —— 图标那部分见 [applyBarIcons]，它必须在 setContentView 之后调。 */
     fun tintWindow(w: Window) {
         w.setBackgroundDrawable(ColorDrawable(p.surface))
         w.statusBarColor = p.surface
         w.navigationBarColor = p.surface
-        if (!p.night) {
+    }
+
+    /**
+     * 状态栏 / 导航栏图标的明暗：浅色主题要深色图标，深色主题要浅色图标。
+     *
+     * **两个坑叠在一起，所以这里用 `post` 而不是直接设**（真机崩溃 + 静默失效，2026-10-08）：
+     * - API 30+ 的 `Window.getInsetsController()` 在 framework 里直接解引用 DecorView
+     *   （`PhoneWindow.getInsetsController()` → `mDecor.getWindowInsetsController()`），
+     *   而 DecorView 是 `setContentView()` 时才创建的。提前调 = NPE：
+     *   `Attempt to invoke virtual method '...DecorView.getWindowInsetsController()'
+     *    on a null object reference`。这个 NPE 抛在 framework 方法**内部**，
+     *   所以 `w.insetsController?.` **拦不住** —— `?.` 只判返回值，不判方法内部。
+     *   它只在浅色分支里执行 → 症状是「深色能开、浅色一启动就闪退」。
+     * - 就算躲过 NPE，DecorView 也要等 attach 到 WindowManager 之后
+     *   （`ActivityThread.handleResumeActivity` → `makeVisible()`，在 onResume 之后）
+     *   才有 `windowInsetsController`；在 onCreate / onPostResume 里读都是 null，
+     *   图标明暗会静默不生效。
+     *
+     * `View.post` 在未 attach 时会把任务排进 run queue，attach 后自动执行 —— 正好解决第二点；
+     * 取控制器则走 `w.decorView`（getter 会按需 installDecor，不会 NPE）。
+     */
+    fun applyBarIcons(w: Window) {
+        val decor = w.decorView
+        decor.post {
             if (Build.VERSION.SDK_INT >= 30) {
-                w.insetsController?.setSystemBarsAppearance(
-                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                        WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                        WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
+                // WindowInsetsController 这个类只在 API 30+ 存在，常量引用必须留在分支内 ——
+                // 提到分支外，旧机执行到那一行会 NoClassDefFoundError。
+                val mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                decor.windowInsetsController?.setSystemBarsAppearance(
+                    if (p.night) 0 else mask, mask)
             } else {
                 @Suppress("DEPRECATION")
-                w.decorView.systemUiVisibility = w.decorView.systemUiVisibility or
-                    View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                val cur = decor.systemUiVisibility
+                @Suppress("DEPRECATION")
+                decor.systemUiVisibility = if (p.night)
+                    cur and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                else
+                    cur or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
             }
         }
     }

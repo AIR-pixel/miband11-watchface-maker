@@ -168,6 +168,10 @@ class MainActivity : Activity() {
         skin = Mat(this)
         skin.tintWindow(window)
         buildUi()
+        // 状态栏/导航栏图标明暗。内部走 post，等 DecorView attach 之后再设 ——
+        // 这里直接调即可，不会踩「DecorView 还没创建 / 还没 attach」那两个坑
+        // （详见 Mat.applyBarIcons 的注释）。
+        skin.applyBarIcons(window)
     }
 
     // ---------------------------------------------------------------- 骨架
