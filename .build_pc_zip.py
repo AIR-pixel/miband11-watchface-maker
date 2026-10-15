@@ -23,7 +23,7 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(REPO, "dist")
 TOP = "miband11-watchface-maker"
 
-KEEP_PREFIX = ("LICENSE", "NOTICE", "README.md",
+KEEP_PREFIX = ("LICENSE", "NOTICE", "README.md", "README_EN.md",
                "docs/", "tools/", "watchface-tool/")
 SKIP = ("__pycache__", "Compiler.exe")
 
