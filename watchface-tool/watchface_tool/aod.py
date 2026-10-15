@@ -46,10 +46,11 @@ AOD 是主工程的**同级子工程**，不单独编译：
 """
 import os
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
-from .constants import (AOD_BG_MODES, AOD_COLON_W, AOD_DATE_DIGIT_H,
-                        AOD_DATE_DIGIT_W, AOD_FONT_CANDIDATES,
+from . import aod_font
+from .constants import (AOD_COLON_W, AOD_DATE_DIGIT_H,
+                        AOD_DATE_DIGIT_W,
                         AOD_TIME_DIGIT_H, AOD_TIME_DIGIT_W, DATA_SOURCES,
                         DEVICE_TYPE, SCREEN_H, SCREEN_W)
 
@@ -58,87 +59,35 @@ from .constants import (AOD_BG_MODES, AOD_COLON_W, AOD_DATE_DIGIT_H,
 DIGIT_IMAGE_COUNT = 11
 
 
-# --------------------------------------------------------------------------- 字体
-
-def find_font(font_path=None):
-    """找一个可用的 TTF。找不到返回 None（退回 PIL 位图字体）。"""
-    for p in ([font_path] if font_path else []) + AOD_FONT_CANDIDATES:
-        if p and os.path.isfile(p):
-            return p
-    return None
-
-
-def _load_font(size, font_path=None):
-    path = find_font(font_path)
-    if path:
-        try:
-            return ImageFont.truetype(path, size)
-        except Exception:                            # noqa: BLE001
-            pass
-    return ImageFont.load_default()
-
-
 # --------------------------------------------------------------------------- 数字位图
 
-def render_digit_images(digit_w, digit_h, color=(255, 255, 255, 255), font_path=None):
+def _colored(alpha, w, h, color):
+    """把 alpha 灰度图按指定颜色合成 RGBA 直通 alpha（RGB 已着色，alpha=遮罩）。"""
+    base = Image.new("RGBA", (w, h), color[:3] + (0,))
+    base.putalpha(Image.frombytes("L", (w, h), alpha))
+    return base
+
+
+def render_digit_images(digit_w, digit_h, color=(255, 255, 255, 255)):
     """生成 0-9 的单数字位图（透明底、居中），返回 list[Image]，共 10 张。
 
-    每个数字占 `digit_w x digit_h` 的独立画布 —— 这是 bitmaplist 的惯例，
-    控件宽度 = digit_w * Digits（官方样本 27x27 数字 → 2 位宽 54）。
+    字形来自内嵌字库（aod_font），不再读系统字体 —— 两端的 AOD 数字因此完全一致，
+    且 fit() 缩放结果可以被 `tools/diff_face.py --stage font` 逐像素对拍。
+    每个数字占 `digit_w x digit_h` 的独立画布，控件宽度 = digit_w * Digits
+    （官方样本 27x27 数字 → 2 位宽 54）。
     """
     out = []
-    # 字号按高度取，留 8% 上下边距；再按实际 bbox 居中。
-    font = _load_font(max(6, int(digit_h * 0.92)), font_path)
     for d in range(10):
-        im = Image.new("RGBA", (digit_w, digit_h), (0, 0, 0, 0))
-        dr = ImageDraw.Draw(im)
-        ch = str(d)
-        try:
-            bbox = dr.textbbox((0, 0), ch, font=font)
-        except Exception:                            # noqa: BLE001
-            bbox = (0, 0, digit_w, digit_h)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        # 超宽时按比例缩字号（比如字号比画布还宽）
-        if tw > digit_w * 0.96 and tw > 0:
-            scale = (digit_w * 0.96) / tw
-            font = _load_font(max(6, int(digit_h * 0.92 * scale)), font_path)
-            try:
-                bbox = dr.textbbox((0, 0), ch, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-            except Exception:                        # noqa: BLE001
-                pass
-        x = (digit_w - tw) / 2.0 - bbox[0]
-        y = (digit_h - th) / 2.0 - bbox[1]
-        dr.text((x, y), ch, font=font, fill=color)
-        out.append(im)
+        alpha = aod_font.fit(aod_font.glyph(d), aod_font.GLYPH_W, aod_font.GLYPH_H,
+                             digit_w, digit_h)
+        out.append(_colored(alpha, digit_w, digit_h, color))
     return out
 
 
-def render_colon_image(w=AOD_COLON_W, h=AOD_TIME_DIGIT_H, color=(255, 255, 255, 255),
-                       font_path=None):
+def render_colon_image(w=AOD_COLON_W, h=AOD_TIME_DIGIT_H, color=(255, 255, 255, 255)):
     """时:分之间的冒号（单独一张 Shape=30 小图）。"""
-    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    dr = ImageDraw.Draw(im)
-    r = max(2, int(w * 0.32))
-    cx = w // 2
-    for cy in (int(h * 0.34), int(h * 0.66)):
-        dr.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
-    return im
-
-
-def render_static_text(text, w, h, color=(255, 255, 255, 200), font_path=None):
-    """一段静态文字（AOD 上不能有 Lua，但静态文字可以画进底图/小图）。"""
-    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    dr = ImageDraw.Draw(im)
-    font = _load_font(max(6, int(h * 0.88)), font_path)
-    try:
-        bbox = dr.textbbox((0, 0), text, font=font)
-    except Exception:                                # noqa: BLE001
-        bbox = (0, 0, w, h)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    dr.text(((w - tw) / 2.0 - bbox[0], (h - th) / 2.0 - bbox[1]), text,
-            font=font, fill=color)
-    return im
+    alpha = aod_font.fit(aod_font.colon(), aod_font.COLON_W, aod_font.COLON_H, w, h)
+    return _colored(alpha, w, h, color)
 
 
 # --------------------------------------------------------------------------- 体积模型
@@ -190,9 +139,13 @@ def generate_aod_fprj(widgets_xml, title="AOD"):
 # --------------------------------------------------------------------------- 组装
 
 def plan_aod_layout(cfg):
-    """算出各控件的位置，返回 (widgets_xml, 需要的图片文件列表)。
+    """算出各控件的位置，返回 (parts, need)。
 
-    时间/日期水平居中：先算总宽，再定起点 X。
+    time/日期水平居中：先算总宽，再定起点 X。
+
+    parts 里每个元素是 `(kind, payload)`，payload **末位是分组标记**
+    （"time" / "date"）—— 下游靠它选位图尺寸与复用数字图，
+    不要再拿「高度等于某个常量」去猜属于哪一行。
     """
     tmode = cfg.get("time_mode", "time")
     W = SCREEN_W
@@ -212,12 +165,13 @@ def plan_aod_layout(cfg):
         x0 = (W - tw) // 2
         y0 = cfg.get("time_y", 200)
         parts.append(("digits", ("aod_hour", x0, y0, AOD_TIME_DIGIT_W, AOD_TIME_DIGIT_H,
-                                 2, DATA_SOURCES["hour"], digit_files)))
+                                 2, DATA_SOURCES["hour"], digit_files, "time")))
         parts.append(("img", ("aod_colon", "aod_colon.png",
-                              x0 + AOD_TIME_DIGIT_W * 2, y0, AOD_COLON_W, AOD_TIME_DIGIT_H)))
+                              x0 + AOD_TIME_DIGIT_W * 2, y0, AOD_COLON_W, AOD_TIME_DIGIT_H,
+                              "time")))
         parts.append(("digits", ("aod_min", x0 + AOD_TIME_DIGIT_W * 2 + AOD_COLON_W, y0,
                                  AOD_TIME_DIGIT_W, AOD_TIME_DIGIT_H, 2,
-                                 DATA_SOURCES["minute"], digit_files)))
+                                 DATA_SOURCES["minute"], digit_files, "time")))
         need.append(("digit_time", None))
 
     # ---- 日期行（月/日）----
@@ -226,12 +180,13 @@ def plan_aod_layout(cfg):
         dx = (W - dw) // 2
         dy = cfg.get("date_y", 300)
         parts.append(("digits", ("aod_month", dx, dy, AOD_DATE_DIGIT_W, AOD_DATE_DIGIT_H,
-                                 2, DATA_SOURCES["month"], date_files)))
+                                 2, DATA_SOURCES["month"], date_files, "date")))
         parts.append(("img", ("aod_dcolon", "aod_dcolon.png",
-                              dx + AOD_DATE_DIGIT_W * 2, dy, AOD_COLON_W, AOD_DATE_DIGIT_H)))
+                              dx + AOD_DATE_DIGIT_W * 2, dy, AOD_COLON_W, AOD_DATE_DIGIT_H,
+                              "date")))
         parts.append(("digits", ("aod_day", dx + AOD_DATE_DIGIT_W * 2 + AOD_COLON_W, dy,
                                  AOD_DATE_DIGIT_W, AOD_DATE_DIGIT_H, 2,
-                                 DATA_SOURCES["day"], date_files)))
+                                 DATA_SOURCES["day"], date_files, "date")))
         need.append(("digit_date", None))
 
     return parts, need
@@ -248,7 +203,6 @@ def build_aod(workdir, cfg, progress=None):
         time_y       时间行 Y（像素）
         date_y       日期行 Y（像素）
         color        '#RRGGBB' 数字/冒号颜色
-        font_path    自定义 TTF
     """
     if not cfg.get("enabled"):
         return 0
@@ -259,7 +213,6 @@ def build_aod(workdir, cfg, progress=None):
     os.makedirs(os.path.join(aod_dir, "output"), exist_ok=True)
 
     color = _hex_to_rgba(cfg.get("color", "#FFFFFF"))
-    font_path = cfg.get("font_path")
     widgets = []
     n_written = 0
 
@@ -282,25 +235,24 @@ def build_aod(workdir, cfg, progress=None):
     made_digits = set()
     for kind, payload in parts:
         if kind == "img":
-            name, fname, x, y, w, h = payload
-            if fname == "aod_colon.png":
-                render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color, font_path).save(
+            name, fname, x, y, w, h, group = payload
+            if group == "time":
+                render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color).save(
                     os.path.join(img_dir, fname))
             else:
-                render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color, font_path).save(
+                render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color).save(
                     os.path.join(img_dir, fname))
             widgets.append(_w_image(name, fname, x, y, w, h))
             n_written += 1
         else:
-            name, x, y, dw, dh, digits, src, files = payload
-            key = "t" if dh == AOD_TIME_DIGIT_H else "d"
-            if key not in made_digits:
+            name, x, y, dw, dh, digits, src, files, group = payload
+            if group not in made_digits:
                 # 10 张数字图（0..9）落盘；BitmapList 里再补一张 0 凑成 11 项
                 # —— 官方样本就是 11 张，照抄数量规避「某位数字不显示」。
-                imgs = render_digit_images(dw, dh, color, font_path)
+                imgs = render_digit_images(dw, dh, color)
                 for i, im in enumerate(imgs):
                     im.save(os.path.join(img_dir, files[i]))
-                made_digits.add(key)
+                made_digits.add(group)
                 n_written += len(imgs)
             widgets.append(_w_digits(name, x, y, dw, dh, digits, src, files + [files[0]]))
 
@@ -328,6 +280,29 @@ def _hex_to_rgba(s):
     return (r, g, b, 255)
 
 
+_GLYPH_CACHE = {"key": None, "val": None}
+
+
+def _glyph_set(color):
+    """一组数字/冒号位图，按 color 缓存。
+
+    GUI 预览每动一下 Y 滑块就要重画一次，不缓存的话每次都要渲染 22 张 PIL 图
+    （10 时间数字 + 10 日期数字 + 2 个冒号），拖滑块会明显卡。
+    调用方只读取（paste），不会改这些位图，所以共享是安全的。
+    """
+    key = (tuple(color),)
+    if _GLYPH_CACHE["key"] == key and _GLYPH_CACHE["val"] is not None:
+        return _GLYPH_CACHE["val"]
+    val = (
+        render_digit_images(AOD_TIME_DIGIT_W, AOD_TIME_DIGIT_H, color),
+        render_digit_images(AOD_DATE_DIGIT_W, AOD_DATE_DIGIT_H, color),
+        render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color),
+        render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color),
+    )
+    _GLYPH_CACHE["key"], _GLYPH_CACHE["val"] = key, val
+    return val
+
+
 def render_preview(cfg, sample_time="09:41", sample_date="07/18"):
     """给 GUI 用的 AOD 效果预览（212x520 RGBA）。与 build_aod 用同一套布局参数。"""
     base = Image.new("RGB", (SCREEN_W, SCREEN_H), (0, 0, 0))
@@ -343,25 +318,21 @@ def render_preview(cfg, sample_time="09:41", sample_date="07/18"):
         base = Image.new("RGB", (SCREEN_W, SCREEN_H), (8, 8, 10))
 
     color = _hex_to_rgba(cfg.get("color", "#FFFFFF"))
-    font_path = cfg.get("font_path")
     tmode = cfg.get("time_mode", "time")
     parts, _ = plan_aod_layout(cfg)
 
-    tdig = render_digit_images(AOD_TIME_DIGIT_W, AOD_TIME_DIGIT_H, color, font_path)
-    ddig = render_digit_images(AOD_DATE_DIGIT_W, AOD_DATE_DIGIT_H, color, font_path)
-    colon_t = render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color, font_path)
-    colon_d = render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color, font_path)
+    tdig, ddig, colon_t, colon_d = _glyph_set(color)
 
     text_t = [c for c in sample_time if c.isdigit()]
     text_d = [c for c in sample_date if c.isdigit()]
 
     for kind, payload in parts:
         if kind == "img":
-            name, fname, x, y, w, h = payload
-            im = colon_t if fname == "aod_colon.png" else colon_d
+            name, fname, x, y, w, h, group = payload
+            im = colon_t if group == "time" else colon_d
             base.paste(im, (x, y), im)
             continue
-        name, x, y, dw, dh, digits, src, _files = payload
+        name, x, y, dw, dh, digits, src, _files, group = payload
         if src == DATA_SOURCES["hour"]:
             seq, arr = text_t[:2], tdig
         elif src == DATA_SOURCES["minute"]:
@@ -376,8 +347,3 @@ def render_preview(cfg, sample_time="09:41", sample_date="07/18"):
                 base.paste(im, (x + k * dw, y), im)
 
     return base
-
-
-def aod_modes():
-    """给 GUI 用的下拉项。"""
-    return AOD_BG_MODES

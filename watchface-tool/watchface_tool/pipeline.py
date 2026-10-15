@@ -3,6 +3,7 @@
 import os
 import shutil
 import tempfile
+import time
 
 from . import aod as aod_mod
 from . import build as build_mod
@@ -12,7 +13,43 @@ from . import fprj as fprj_mod
 from . import lua as lua_mod
 from . import quantize as quantize_mod
 from .constants import (COMPRESS_LEVELS, DEFAULT_FPS, DEFAULT_MAX_FRAMES,
-                        JPG_QUALITY)
+                        JPG_QUALITY, TAP_ACTIONS)
+
+
+def auto_face_id():
+    """按时间戳生成表盘 ID（避免与市集表盘撞车）。"""
+    return str(int(time.time()))[-8:]
+
+
+def format_result(r):
+    """把生成结果整理成展示用的四段文本，CLI 与 GUI 共用。
+
+    之前这两段在 main.py 与 gui/window.py 里各写了一遍，改一处漏一处。
+    返回 (fps_txt, fmt_txt, speed_txt, extra_txt)。
+    """
+    fps_txt = f"{r.effective_fps:.1f}fps" if getattr(r, "effective_fps", 0) else "静态"
+    fmt_txt = ("PNG" if getattr(r, "fmt", "png") == "png"
+               else f"JPEG q{getattr(r, 'jpg_quality', JPG_QUALITY)}")
+
+    # span_seconds 是**素材被覆盖的时长**，play_seconds 是**实际播放时长**；
+    # 快放模式下两者差一个倍数，非快放时相等 —— 别再拿同一个数当两个数用。
+    speed_txt = ""
+    if getattr(r, "speed_mult", 1.0) > 1.01:
+        speed_txt = (f" · 覆盖 {r.span_seconds:.1f}s 快放 {r.speed_mult:.1f}x"
+                     f"（播放 {r.play_seconds:.1f}s）")
+    elif getattr(r, "play_seconds", 0):
+        speed_txt = f" · 播放 {r.play_seconds:.1f}s"
+
+    extra = []
+    if getattr(r, "n_walls", 1) > 1:
+        extra.append(f"{r.n_walls} 张壁纸")
+    if getattr(r, "aod_enabled", False):
+        extra.append(f"AOD +{r.aod_bytes / 1024:.0f} KB")
+    tap = getattr(r, "tap_action", "none")
+    if tap != "none":
+        extra.append("交互：" + TAP_ACTIONS.get(tap, {}).get("label", tap))
+    extra_txt = (" · " + " · ".join(extra)) if extra else ""
+    return fps_txt, fmt_txt, speed_txt, extra_txt
 
 
 class PipelineResult:
@@ -77,8 +114,7 @@ def generate_face(
             progress(frac, msg)
 
     if face_id is None:
-        import time
-        face_id = str(int(time.time()))[-8:]
+        face_id = auto_face_id()
 
     walls_in = [(source_path, crop_box)] + [
         (w[0], w[1] if len(w) > 1 else None) for w in (extra_walls or [])
@@ -97,7 +133,8 @@ def generate_face(
         wall_meta = []          # 喂给 lua 生成器
         first_frame = None
         total_frames = 0
-        total_span = 0.0
+        total_play = 0.0        # 实际播放时长（帧数 x 播放节奏）
+        total_span = 0.0        # 素材被覆盖的时长（快放模式下 > 播放时长）
         speed_max = 1.0
         n_walls = len(walls_in)
 
@@ -123,8 +160,10 @@ def generate_face(
                     report(0.05, f"时长 {plan.span:.1f}s x {target_fps}fps 超过帧数上限 "
                                  f"{max_frames}，自动降到 {plan.play_fps:.1f}fps（时长不变）")
 
+            # meta 复用：load_source_meta 对视频要跑一次 ffmpeg -i、对 GIF 要遍历
+            # 全部帧累加 duration，这里只 probe 一次，plan 与抽帧共用。
             frames, period_ms = extract_mod.extract_frames(
-                src, target_fps, max_frames, clip_start, clip_dur, speedup)
+                src, target_fps, max_frames, clip_start, clip_dur, speedup, meta=meta)
             n = len(frames)
             prefix = _wall_prefix(wi)
             report(0.05 + 0.7 * wi / n_walls, f"共 {n} 帧，{period_ms}ms/帧 {tag}")
@@ -143,7 +182,8 @@ def generate_face(
             wall_meta.append({"prefix": prefix, "count": n, "period_ms": period_ms})
             total_frames += n
             if period_ms:
-                total_span += n * period_ms / 1000.0
+                total_play += n * period_ms / 1000.0
+            total_span += plan.span
             if plan.sample_fps and plan.sample_fps > 0:
                 speed_max = max(speed_max, plan.play_fps / plan.sample_fps)
 
@@ -202,7 +242,7 @@ def generate_face(
             effective_fps=play_fps,
             speedup=speedup,
             speed_mult=speed_max,
-            play_seconds=total_span,
+            play_seconds=total_play,
             span_seconds=total_span,
             face_id=face_id,
             face_name=face_name,

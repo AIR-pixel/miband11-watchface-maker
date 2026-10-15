@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """裁切：把用户框选吸附到 212:520 比例并 clamp 到画面内。"""
+from PIL import Image
+
 from .constants import ASPECT, SCREEN_H, SCREEN_W
+
+try:                                   # Pillow >= 9.1
+    _LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:                 # 老版本兜底
+    _LANCZOS = Image.LANCZOS
 
 
 def resolve_crop(box, W, H):
@@ -42,4 +49,4 @@ def default_crop(W, H):
 def apply_crop(img, box, W, H):
     """对单帧执行裁切并 Lanczos 缩放到 212x520。返回 RGB Image。"""
     x0, y0, x1, y1 = resolve_crop(box, W, H)
-    return img.crop((x0, y0, x1, y1)).resize((SCREEN_W, SCREEN_H), resample=3)  # 3 = LANCZOS
+    return img.crop((x0, y0, x1, y1)).resize((SCREEN_W, SCREEN_H), _LANCZOS)

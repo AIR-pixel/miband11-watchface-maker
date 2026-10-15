@@ -58,8 +58,8 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
-| **安卓** | [watchface-tool-android-v2.1.1.apk](../../releases/latest/download/watchface-tool-android-v2.1.1.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v2.1.1.zip](../../releases/latest/download/watchface-tool-pc-v2.1.1.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
+| **安卓** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | 直接安装。系统要求 Android 7.0+（minSdk 24） |
+| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
 
 > Android 版安装时系统可能提示「未知来源应用」，需要在设置里允许。
 
@@ -334,7 +334,7 @@ python main.py
 页签 ②（四组，全部可选，不做就是原来的纯动态壁纸）：
 
 1. **A. 息屏显示（AOD）** —— 开关、底图（无 / 纯黑 / 自定义图片）、显示内容
-   （不显示 / 时间 / 时间+日期）、时间 Y、日期 Y、颜色、数字字体（可指定 TTF）。
+   （不显示 / 时间 / 时间+日期）、时间 Y、日期 Y、颜色（字形来自内嵌字库，两端像素一致）。
    下方是**实时预览**和体积预估行
 2. **B. 壁纸（多张，点击可轮换）** —— 列表 + 「添加壁纸…」「移除选中」。
    第 1 张就是页签 ① 里选的素材。**每张壁纸独立占体积**
@@ -352,7 +352,7 @@ python main.py
 
 **1. 安装**
 
-下载 [watchface-tool-android-v2.1.1.apk](../../releases/latest/download/watchface-tool-android-v2.1.1.apk) 安装（Android 7.0+）。
+下载 [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) 安装（Android 7.0+）。
 
 **2. 操作流程**
 
@@ -471,7 +471,7 @@ python main.py --cli \
 | `--aod-bg` | `none`（默认，不占体积）/ `black` / `custom` |
 | `--aod-bg-image` | `--aod-bg custom` 时的图片路径 |
 | `--aod-time-y` / `--aod-date-y` | AOD 时间/日期行的 Y 坐标，默认 200 / 300 |
-| `--aod-color` / `--aod-font` | AOD 数字颜色 `#RRGGBB` / 字体 TTF 路径 |
+| `--aod-color` | AOD 数字颜色 `#RRGGBB`（字形来自内嵌字库 `tools/gen_aod_font.py`） |
 
 例：双壁纸 + AOD + 点按切壁纸
 

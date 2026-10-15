@@ -21,6 +21,7 @@ import java.util.Map;
  *     java -cp &lt;classes&gt; DiffMain lua  &lt;luaCases&gt;  &lt;outDir&gt;
  *     java -cp &lt;classes&gt; DiffMain aod  &lt;aodCases&gt;  &lt;outDir&gt;
  *     java -cp &lt;classes&gt; DiffMain asm  &lt;asmCases&gt;  &lt;outDir&gt; &lt;aodCases&gt;
+ *     java -cp &lt;classes&gt; DiffMain font &lt;fontCases&gt; &lt;outDir&gt;
  *
  * 编译：
  *     javac -d &lt;out&gt; watchface-android/core/face/*.java tools/diff/jvm/DiffMain.java
@@ -172,6 +173,8 @@ public final class DiffMain {
             runAod(cases, out);
         } else if (mode.equals("asm")) {
             runAsm(cases, Paths.get(a[3]), out);
+        } else if (mode.equals("font")) {
+            runFont(cases, out);
         } else {
             System.out.println("未知模式 " + mode);
             System.exit(2);
@@ -205,6 +208,36 @@ public final class DiffMain {
             n++;
         }
         System.out.printf("  java: aod %d 份%n", n);
+    }
+
+    /**
+     * 字库阶段：把 {@link face.AodFont} 的内嵌点阵缩放到用例表给的画布上，
+     * 与 Python 侧 {@code watchface_tool/aod_font.py} 的 fit() 逐字节对拍。
+     *
+     * <p>字形本身两边是同一份数据（tools/gen_aod_font.py 生成），所以这里真正
+     * 比的是**缩放算法**——双线性采样的取整、越界处理、0.96 宽度钳制分支。
+     */
+    static void runFont(Path cases, Path out) throws Exception {
+        int n = 0;
+        for (String[] f : rows(cases)) {
+            if (f.length != 5) throw new IllegalStateException("font 用例字段数 " + f.length);
+            String name = f[0];
+            boolean isColon = "colon".equals(f[1]);
+            int w = Integer.parseInt(f[3]);
+            int h = Integer.parseInt(f[4]);
+            byte[] mask;
+            if (isColon) {
+                mask = face.AodFont.fit(face.AodFont.colon(),
+                                        face.AodFont.COLON_W, face.AodFont.COLON_H, w, h);
+            } else {
+                int d = Integer.parseInt(f[2]);
+                mask = face.AodFont.fit(face.AodFont.glyph(d),
+                                        face.AodFont.GLYPH_W, face.AodFont.GLYPH_H, w, h);
+            }
+            Files.write(out.resolve(name + ".bin"), mask);
+            n++;
+        }
+        System.out.printf("  java: font %d 份%n", n);
     }
 
     static void runAsm(Path cases, Path aodCases, Path out) throws Exception {

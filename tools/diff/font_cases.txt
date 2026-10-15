@@ -1,0 +1,37 @@
+# AOD 字库对拍用例表 —— Python 侧 aod_font.fit 与 JVM 侧 AodFont.fit 逐字节比对。
+#
+# 格式：name|kind|value|w|h
+#   kind = digit（value 取 0-9）| colon（value 忽略，写 -）
+#
+# 覆盖三类分支，缺一不可：
+#   1. 生产实际尺寸      —— 时间数字 46x64、日期数字 20x28、冒号 12x64 / 12x28
+#   2. 0.96 宽度钳制分支 —— 极窄画布（12x64）强制走「按宽度算 scale」，
+#                          这是最容易两端写歪的一条路径（缩进 / 取整 / 截断）
+#   3. 极小画布          —— 8 行高，验证 y0 为负、采样越界的处理一致
+
+t0|digit|0|46|64
+t1|digit|1|46|64
+t2|digit|2|46|64
+t3|digit|3|46|64
+t4|digit|4|46|64
+t5|digit|5|46|64
+t6|digit|6|46|64
+t7|digit|7|46|64
+t8|digit|8|46|64
+t9|digit|9|46|64
+d0|digit|0|20|28
+d1|digit|1|20|28
+d2|digit|2|20|28
+d3|digit|3|20|28
+d4|digit|4|20|28
+d5|digit|5|20|28
+d6|digit|6|20|28
+d7|digit|7|20|28
+d8|digit|8|20|28
+d9|digit|9|20|28
+colon_t|colon|-|12|64
+colon_d|colon|-|12|28
+narrow8|digit|8|12|64
+narrow0|digit|0|14|64
+tiny7|digit|7|46|8
+tiny1|digit|1|20|6

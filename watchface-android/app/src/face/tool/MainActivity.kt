@@ -96,8 +96,13 @@ class MainActivity : Activity() {
     private var sourceUri: Uri? = null
     private var srcType = "video"
     private var srcDurationMs = 0.0
+    /** 主壁纸已解码的首帧：体积预估会被反复调用，缓存起来免得每次重新解码视频。 */
+    private var srcPreview: Bitmap? = null
 
-    private class ExtraWall(val uri: Uri, val type: String, val name: String, var durationMs: Double)
+    private class ExtraWall(val uri: Uri, val type: String, val name: String, var durationMs: Double) {
+        /** 同上，额外壁纸的首帧缓存。 */
+        var preview: Bitmap? = null
+    }
 
     private val extraWalls = ArrayList<ExtraWall>()
     private var aodBgUri: Uri? = null
@@ -162,6 +167,17 @@ class MainActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private val estRunner = Runnable { updateEstimate() }
+
+    /**
+     * 回主线程执行，Activity 已经 finishing/destroyed 就直接丢弃。
+     *
+     * 生成任务跑在裸 Thread 上并持有 Activity 引用：切主题走的是 [recreate]，
+     * 旧线程还会继续往已经销毁的界面上 post，不加这道闸就会更新到僵尸 View。
+     */
+    private fun post(block: () -> Unit) {
+        if (isFinishing || isDestroyed) return
+        ui.post { if (!isFinishing && !isDestroyed) block() }
+    }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -580,8 +596,9 @@ class MainActivity : Activity() {
                     val dur = if (type == "image") 0.0
                               else FaceGenerator.probeDurationMs(this, picked, type)
                     val bmp: Bitmap? = FaceGenerator.previewFrame(this, picked, type)
-                    ui.post {
+                    post {
                         srcDurationMs = dur
+                        srcPreview = bmp
                         cropView.setBitmap(bmp)
                         if (dur > 0) fileLabel.text =
                             name + String.format(Locale.US, "\n时长 %.1fs", dur / 1000.0)
@@ -601,7 +618,10 @@ class MainActivity : Activity() {
                 Thread {
                     w.durationMs = if (type == "image") 0.0
                                    else FaceGenerator.probeDurationMs(this, picked, type)
-                    ui.post {
+                    // 顺手把首帧解码出来存着：预估时要用来算每帧字节数，
+                    // 不缓存的话每次改参数都要重新解码一遍视频。
+                    w.preview = FaceGenerator.previewFrame(this, picked, type)
+                    post {
                         renderExtraWalls()
                         scheduleEstimate()
                     }
@@ -613,7 +633,7 @@ class MainActivity : Activity() {
                     val bmp = try {
                         contentResolver.openInputStream(picked)?.use { BitmapFactory.decodeStream(it) }
                     } catch (e: Exception) { null }
-                    ui.post {
+                    post {
                         aodBgBitmap = bmp
                         if (aodBgSpinner.selectedItemPosition != 2) aodBgSpinner.setSelection(2)
                         onAodChanged()
@@ -732,28 +752,32 @@ class MainActivity : Activity() {
         val level = levelOf()
         val fmt = fmtOf()
         val jpgQ = jpgQualityOf()
-        val fps = fpsOf()
+        // planFrames 收 double（素材真实帧率可能不是整数），Kotlin 不会自动拓宽 Int
+        val fps = fpsOf().toDouble()
         val maxFrames = maxFrameOf()
         val clipStart = dOf(startEdit, 0.0)
         val clipDur = dOf(durEdit, 0.0)
         val speedup = speedupCheck.isChecked
         val dur = srcDurationMs
         val extras = extraWalls.map { Triple(it.uri, it.type, it.durationMs) }
+        val previews = extraWalls.map { it.preview }
 
         Thread {
             val p0 = FaceGenerator.planFrames(dur, fps, clipStart, clipDur, maxFrames, speedup)
-            var bytes = FaceGenerator.estimateWallBytes(this, u, type, crop, level, fmt, p0.nFrames, jpgQ)
+            // 传已解码的首帧进去：否则每改一次参数，每张壁纸都要重新解码一遍视频
+            var bytes = FaceGenerator.estimateWallBytes(
+                this, u, type, crop, level, fmt, p0.nFrames, jpgQ, srcPreview)
             var frames = p0.nFrames
-            var playSec = p0.playSeconds()
-            for ((eu, et, ed) in extras) {
+            for ((i, e) in extras.withIndex()) {
+                val (eu, et, ed) = e
                 val pi = FaceGenerator.planFrames(ed, fps, clipStart, clipDur, maxFrames, speedup)
-                bytes += FaceGenerator.estimateWallBytes(this, eu, et, null, level, fmt, pi.nFrames, jpgQ)
+                bytes += FaceGenerator.estimateWallBytes(
+                    this, eu, et, null, level, fmt, pi.nFrames, jpgQ, previews[i])
                 frames += pi.nFrames
-                playSec += pi.playSeconds()
             }
             val aod = AodGen.estimateBytes(cfg)
             val total = bytes + FaceGenerator.HEADER_OVERHEAD + aod
-            ui.post {
+            post {
                 val nWalls = 1 + extras.size
                 val extra = if (p0.speedMult() > 1.01)
                     String.format(Locale.US, " · %.1fx 快放", p0.speedMult()) else ""
@@ -799,7 +823,7 @@ class MainActivity : Activity() {
         o.fmt = fmtOf()
         o.jpgQuality = jpgQualityOf()
         o.title = "Watchface"
-        o.faceId = null
+        o.faceId = (System.currentTimeMillis() / 1000).toString().take(8)
 
         with(o.lua) {
             showTime = showTimeCheck.isChecked
@@ -823,24 +847,23 @@ class MainActivity : Activity() {
 
         Thread {
             try {
-                val faceId = (System.currentTimeMillis() / 1000).toString().take(8)
-                o.faceId = faceId
+                val faceId = o.faceId ?: ""
                 val face = FaceGenerator.generate(this, o) { f, m ->
-                    ui.post {
+                    post {
                         progress.progress = (f * 100).toInt()
                         status.text = m
                     }
                 }
                 val path = saveFace(face, faceId)
                 val mb = face.size / 1048576.0
-                ui.post {
+                post {
                     skin.setEnabled(genBtn, true)
                     progress.progress = 100
                     status.text = String.format(Locale.US, "完成 %.2f MB\n%s", mb, path)
                     toast(String.format(Locale.US, "生成完成 %.2f MB", mb))
                 }
             } catch (e: Exception) {
-                ui.post {
+                post {
                     skin.setEnabled(genBtn, true)
                     status.text = "失败: ${e.message}"
                     toast("生成失败: ${e.message}")

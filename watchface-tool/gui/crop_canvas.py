@@ -42,9 +42,9 @@ class CropCanvas(tk.Canvas):
         self._dpr = dpr
 
         self._src = None            # PIL RGB Image（原始尺寸）
-        self._photo = None          # 必须留着引用，否则 Tk 会把图回收成空白
-        self._dim_src = None        # 整体压暗版，用于框外遮罩
-        self._dim_photos = []       # 同样是引用保活
+        self._disp = None           # 适配控件尺寸后的显示图（框内区域直接从它裁）
+        self._dim_photo = None      # 整体压暗版，框外遮罩就是它（引用保活）
+        self._inner_photo = None    # 框内原图（每帧重建，引用保活）
         self._src_w = 0
         self._src_h = 0
         self._img_rect = None       # 图片在控件内的绘制区域（物理像素）
@@ -126,10 +126,11 @@ class CropCanvas(tk.Canvas):
         self._img_rect = (ox, oy, dw, dh)
         # 预览按适配后的尺寸重采样，Canvas 不做缩放
         disp = self._src.resize((max(int(dw), 1), max(int(dh), 1)), _LANCZOS)
-        self._photo = ImageTk.PhotoImage(disp)
-        # 再准备一张整体压暗的版本：框外遮罩直接贴它的四条边。
+        self._disp = disp
+        # 再准备一张整体压暗的版本：框外直接贴它，框内再把原图盖回去。
         # （tk 没有 alpha 通道，用 stipple 网点会看出"纱窗"格子，贴位图才干净。）
-        self._dim_src = Image.blend(disp, Image.new("RGB", disp.size, (0, 0, 0)), 0.62)
+        dim = Image.blend(disp, Image.new("RGB", disp.size, (0, 0, 0)), 0.62)
+        self._dim_photo = ImageTk.PhotoImage(dim)
 
     def _scale(self):
         if self._src is None or self._img_rect is None or self._src_w == 0:
@@ -265,28 +266,20 @@ class CropCanvas(tk.Canvas):
             return
 
         ir = self._img_rect
-        self.create_image(ir[0], ir[1], anchor="nw", image=self._photo)
+        # 暗化裁剪框外区域：整张贴压暗图，再把框内的原图盖回去。
+        # 之前是裁四条边贴出来，每次拖动都要新建 4 个 PhotoImage；
+        # 压暗图在 _recalc_fit 里建一次就够，这里每帧只裁一次框内区域。
+        if self._dim_photo is not None:
+            self.create_image(ir[0], ir[1], anchor="nw", image=self._dim_photo)
 
         cr = self._crop_widget_rect()
-        # 暗化裁剪框外区域：贴压暗位图的四条边（tk 无 alpha，stipple 会有"纱窗"格子）
-        self._dim_photos = []
-        if self._dim_src is not None:
-            for box in (
-                (ir[0], ir[1], ir[0] + ir[2], cr[1]),                      # 上
-                (ir[0], cr[3], ir[0] + ir[2], ir[1] + ir[3]),              # 下
-                (ir[0], cr[1], cr[0], cr[3]),                              # 左
-                (cr[2], cr[1], ir[0] + ir[2], cr[3]),                      # 右
-            ):
-                x0 = int(round(box[0] - ir[0]))
-                y0 = int(round(box[1] - ir[1]))
-                x1 = int(round(box[2] - ir[0]))
-                y1 = int(round(box[3] - ir[1]))
-                if x1 - x0 < 1 or y1 - y0 < 1:
-                    continue
-                strip = self._dim_src.crop((x0, y0, x1, y1))
-                ph = ImageTk.PhotoImage(strip)
-                self._dim_photos.append(ph)
-                self.create_image(box[0], box[1], anchor="nw", image=ph)
+        x0 = int(round(cr[0] - ir[0]))
+        y0 = int(round(cr[1] - ir[1]))
+        x1 = int(round(cr[2] - ir[0]))
+        y1 = int(round(cr[3] - ir[1]))
+        if self._disp is not None and x1 - x0 >= 1 and y1 - y0 >= 1:
+            self._inner_photo = ImageTk.PhotoImage(self._disp.crop((x0, y0, x1, y1)))
+            self.create_image(ir[0] + x0, ir[1] + y0, anchor="nw", image=self._inner_photo)
 
         # 裁剪框边框
         self.create_rectangle(cr[0], cr[1], cr[2], cr[3],

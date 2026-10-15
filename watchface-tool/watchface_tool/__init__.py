@@ -5,4 +5,5 @@
 导入素材 -> 框选裁剪区域 -> 选压缩等级与帧率 -> 调用 Compiler.exe 打包。
 """
 
-__version__ = "0.1.0"
+# 与 AndroidManifest 的 versionName / Release 版本号保持一致
+__version__ = "2.2.0"

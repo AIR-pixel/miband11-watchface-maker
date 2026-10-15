@@ -13,10 +13,13 @@
 """
 import json
 import os
+import queue
 import sys
 import threading
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, ttk
+
+from PIL import Image
 
 from watchface_tool import aod as aod_mod
 from watchface_tool import crop as crop_mod
@@ -46,6 +49,11 @@ except Exception:                                    # noqa: BLE001
     DND_FILES = None
     TkinterDnD = None
     _HAS_DND = False
+
+try:                                   # Pillow >= 9.1
+    _LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:                 # 老版本兜底
+    _LANCZOS = Image.LANCZOS
 
 
 # ---------------------------------------------------------------------- 配置
@@ -126,8 +134,11 @@ class MainWindow:
         self._est_job = None
         self._aod_job = None
         self._building = False
-        self._extra_walls = []       # [(path, crop_box 或 None)]
+        self._extra_walls = []       # [(path, crop_box 或 None, meta)]
         self._aod_photo = None       # 保持引用，否则被 GC 掉图就没了
+        # 工作线程 -> 主线程的消息队列（tkinter 不能从子线程直接调 after）
+        self._queue = queue.Queue()
+        self._pump_job = None
 
         cfg = _load_config()
         self._compiler = cfg.get("compiler") or self._find_compiler()
@@ -350,8 +361,9 @@ class MainWindow:
         r += 1
 
         add_label("体积预算", r)
-        self.budget_var = tk.IntVar(value=int(DEFAULT_BUDGET_MB))
-        ttk.Spinbox(g, from_=1, to=20, textvariable=self.budget_var,
+        # DoubleVar：默认预算是 3.5 MB，用 IntVar 会被截成 3，超预算判定跟着偏。
+        self.budget_var = tk.DoubleVar(value=DEFAULT_BUDGET_MB)
+        ttk.Spinbox(g, from_=1, to=20, increment=0.5, textvariable=self.budget_var,
                     command=self._on_param_changed
                     ).grid(row=r, column=1, sticky="ew", pady=int(2 * self.dpr))
         self.budget_var.trace_add("write", lambda *_: self._on_param_changed())
@@ -463,14 +475,10 @@ class MainWindow:
         self.aod_color.trace_add("write", lambda *_: self._on_aod_changed())
         r += 1
 
-        self.aod_font = tk.StringVar(value="")
-        ttk.Label(g, text="数字字体").grid(row=r, column=0, sticky="w", pady=int(2 * self.dpr))
-        frow = ttk.Frame(g)
-        frow.grid(row=r, column=1, sticky="ew", pady=int(2 * self.dpr))
-        frow.columnconfigure(0, weight=1)
-        ttk.Entry(frow, textvariable=self.aod_font).grid(row=0, column=0, sticky="ew",
-                                                         padx=(0, int(4 * self.dpr)))
-        ttk.Button(frow, text="TTF", width=5, command=self._pick_aod_font).grid(row=0, column=1)
+        # AOD 数字已用内嵌字库 —— 不再支持自定义 TTF，注释里说明
+        self._note(g, "AOD 数字字体已固化为内嵌点阵（Arial Bold），两端 AOD 像素完全一致。"
+                 ).grid(row=r, column=0, columnspan=3, sticky="w",
+                        pady=(int(4 * self.dpr), 0))
         r += 1
 
         self._note(g, "AOD 用的是系统数据源（时/分/月/日），不走 Lua —— "
@@ -691,7 +699,8 @@ class MainWindow:
             cfg = self._aod_cfg()
             scale = max(1, int(round(0.42 * self.dpr * 2)))   # 212 -> ~178 px 宽
             im = aod_mod.render_preview(cfg)
-            im = im.resize((212 * scale // 2, 520 * scale // 2), 1)
+            # 原来是 NEAREST（魔法数 1），预览是硬锯齿的
+            im = im.resize((212 * scale // 2, 520 * scale // 2), _LANCZOS)
             from PIL import ImageTk
             self._aod_photo = ImageTk.PhotoImage(im)
             self.aod_preview.config(image=self._aod_photo, text="")
@@ -743,7 +752,6 @@ class MainWindow:
             "time_y": self._int(self.aod_time_y, 200),
             "date_y": self._int(self.aod_date_y, 300),
             "color": self.aod_color.get().strip() or "#FFFFFF",
-            "font_path": self.aod_font.get().strip() or None,
         }
 
     def _aod_estimate_text(self):
@@ -802,7 +810,8 @@ class MainWindow:
                 messagebox.showwarning("无法读取", f"{os.path.basename(p)}\n{e}",
                                        parent=self.root)
                 continue
-            self._extra_walls.append((p, crop_mod.default_crop(*meta["size"])))
+            # 存 meta：体积预估要逐张算帧数（额外壁纸可能是静态图，只有 1 帧）
+            self._extra_walls.append((p, crop_mod.default_crop(*meta["size"]), meta))
         self._refresh_wall_list()
         self._schedule_estimate()
 
@@ -818,7 +827,7 @@ class MainWindow:
         self.wall_list.delete(0, tk.END)
         first = os.path.basename(self._source_path) if self._source_path else "（未选择）"
         self.wall_list.insert(tk.END, f"1. {first}")
-        for i, (p, _c) in enumerate(self._extra_walls):
+        for i, (p, _c, _m) in enumerate(self._extra_walls):
             self.wall_list.insert(tk.END, f"{i + 2}. {os.path.basename(p)}")
         try:
             self.wall_list.itemconfig(0, foreground="#00806a")
@@ -838,24 +847,41 @@ class MainWindow:
             return
         try:
             clip_dur = self._float(self.dur_var, 0.0) or None
+            clip_start = self._float(self.start_var, 0.0)
             maxf = self._int(self.maxframes_var, DEFAULT_MAX_FRAMES)
+            fps = self._fps_value()
+            speedup = self.speedup_var.get()
+            level, fmt, jpgq = self._level_key(), self._fmt_key(), self._jpg_quality()
+
+            # 帧数**逐张**算：额外壁纸可能是静态图（1 帧），按第 1 张的帧数乘
+            # 壁纸数会把它高估几十倍。每帧字节数则复用第 1 张的真实编码 ——
+            # 所有壁纸都被裁到同一 212x520、同一压缩等级，量级一致；
+            # 真去解码每张壁纸的首帧，8 张视频能把 UI 卡住好几秒，不值。
             plan = extract_mod.plan_frames(
-                self._meta, self._fps_value(), maxf,
-                self._float(self.start_var, 0.0), clip_dur, self.speedup_var.get())
+                self._meta, fps, maxf, clip_start, clip_dur, speedup)
             W, H = self._meta["size"]
             cropped = crop_mod.apply_crop(self._preview_img, self.canvas.get_crop(), W, H)
-            total = quantize_mod.estimate_total_bytes(
-                cropped, self._level_key(), self._fmt_key(), plan.n,
-                jpg_quality=self._jpg_quality())
+            per_frame = quantize_mod.frame_size_bytes(cropped, level, fmt, jpgq)
+
+            frame_bytes = per_frame * plan.n
+            total_frames = plan.n
+            play_s = plan.n * plan.period_ms / 1000.0 if plan.period_ms else 0.0
+            for _p, _c, meta in self._extra_walls:
+                pi = extract_mod.plan_frames(
+                    meta, fps, maxf, clip_start, clip_dur, speedup)
+                frame_bytes += per_frame * pi.n
+                total_frames += pi.n
+                play_s += (pi.n * pi.period_ms / 1000.0 if pi.period_ms else 0.0)
+
             n_walls = 1 + len(self._extra_walls)
             aod_b = aod_mod.estimate_aod_bytes(self._aod_cfg())
-            mb = (total * n_walls + aod_b) / 1048576.0
-            budget = self._int(self.budget_var, DEFAULT_BUDGET_MB)
+            # 固定开销只算一次，不跟着壁纸数翻
+            mb = (frame_bytes + quantize_mod.HEADER_OVERHEAD + aod_b) / 1048576.0
+            budget = self._float(self.budget_var, DEFAULT_BUDGET_MB)
 
-            play_s = plan.n * plan.period_ms / 1000.0 if plan.period_ms else 0.0
-            note = f"预计 {plan.n} 帧 × {n_walls} 张壁纸 · 约 {mb:.2f} MB"
-            if self._fmt_key() == "jpg":
-                note += f"（JPEG q{self._jpg_quality()}）"
+            note = f"预计 {total_frames} 帧 / {n_walls} 张壁纸 · 约 {mb:.2f} MB"
+            if fmt == "jpg":
+                note += f"（JPEG q{jpgq}）"
             if aod_b:
                 note += f"\n其中 AOD +{aod_b / 1024:.0f} KB"
             if plan.span > 0:
@@ -891,14 +917,6 @@ class MainWindow:
             self.aod_bg_path.set(p)
             idx = list(AOD_BG_MODES.keys()).index("custom")
             self.aod_bg_combo.current(idx)
-            self._on_aod_changed()
-
-    def _pick_aod_font(self):
-        p = filedialog.askopenfilename(
-            title="选择数字字体（TTF）", parent=self.root,
-            filetypes=[("字体", "*.ttf *.otf"), ("所有文件", "*.*")])
-        if p:
-            self.aod_font.set(p)
             self._on_aod_changed()
 
     # ------------------------------------------------------------------ Compiler
@@ -967,8 +985,7 @@ class MainWindow:
     # ------------------------------------------------------------------ 生成
 
     def _gen_id(self):
-        import time
-        return str(int(time.time()))[-8:]
+        return pipeline.auto_face_id()
 
     def _start_build(self):
         if not self._source_path:
@@ -1035,50 +1052,51 @@ class MainWindow:
         self.build_btn.config(state="disabled")
         self.progress["value"] = 0
         threading.Thread(target=self._build_worker, args=(params,), daemon=True).start()
+        self._pump_job = self.root.after(50, self._pump)
 
     def _build_worker(self, params):
+        """工作线程：只往队列里放消息，绝不直接碰 Tk 控件。"""
         try:
             r = pipeline.generate_face(progress=self._on_bg_progress, **params)
-            self.root.after(0, self._on_done, r)
+            self._queue.put(("done", r))
         except Exception as e:                       # noqa: BLE001
-            self.root.after(0, self._on_failed, str(e))
+            self._queue.put(("failed", str(e)))
 
     def _on_bg_progress(self, frac, msg):
-        self.root.after(0, self._on_progress, frac, msg)
+        # tkinter 不是线程安全的：从子线程调 root.after() 属于未定义行为，
+        # 在部分平台/版本上会随机抛异常或丢事件。改成子线程投递、主线程消费。
+        self._queue.put(("progress", frac, msg))
 
-    def _on_progress(self, frac, msg):
-        if not self._building:
-            return
-        self.progress["value"] = int(frac * 100)
-        self.status.config(text=msg)
+    def _pump(self):
+        """主线程排空队列（50ms 轮询）。"""
+        self._pump_job = None
+        try:
+            while True:
+                item = self._queue.get_nowait()
+                kind = item[0]
+                if kind == "progress":
+                    if self._building:
+                        self.progress["value"] = int(item[1] * 100)
+                        self.status.config(text=item[2])
+                elif kind == "done":
+                    self._on_done(item[1])
+                    return
+                else:
+                    self._on_failed(item[1])
+                    return
+        except queue.Empty:
+            pass
+        self._pump_job = self.root.after(50, self._pump)
 
     def _on_done(self, r):
         self._building = False
         self.build_btn.config(state="normal")
         self.progress["value"] = 100
         size_mb = r.face_size / 1048576.0
-        budget = self._int(self.budget_var, DEFAULT_BUDGET_MB)
+        budget = self._float(self.budget_var, DEFAULT_BUDGET_MB)
         over = "（超出预算，建议降帧率或缩短时长）" if size_mb > budget else ""
-        fps_txt = f"{r.effective_fps:.1f}fps" if getattr(r, "effective_fps", 0) else "静态"
-        fmt_txt = ("PNG" if getattr(r, "fmt", "png") == "png"
-                   else f"JPEG q{getattr(r, 'jpg_quality', JPG_QUALITY)}")
-        mult = getattr(r, "speed_mult", 1.0) or 1.0
-        if mult > 1.01:
-            speed_txt = (f" · 覆盖 {r.span_seconds:.1f}s 快放 {mult:.1f}×"
-                         f"（播放 {r.play_seconds:.1f}s）")
-        elif getattr(r, "play_seconds", 0):
-            speed_txt = f" · 播放 {r.play_seconds:.1f}s"
-        else:
-            speed_txt = ""
-        extra = []
-        if getattr(r, "n_walls", 1) > 1:
-            extra.append(f"{r.n_walls} 张壁纸")
-        if getattr(r, "aod_enabled", False):
-            extra.append(f"AOD +{r.aod_bytes / 1024:.0f} KB")
-        tap = getattr(r, "tap_action", "none")
-        if tap != "none":
-            extra.append("交互：" + TAP_ACTIONS.get(tap, {}).get("label", tap))
-        extra_txt = (" · " + " · ".join(extra)) if extra else ""
+        # 与 CLI 共用同一套摘要格式，避免两边各写一遍、改一处漏一处
+        fps_txt, fmt_txt, speed_txt, extra_txt = pipeline.format_result(r)
 
         self.status.config(
             text=f"完成：{r.n_frames} 帧 @ {fps_txt} · {r.level_label} · {fmt_txt} · "

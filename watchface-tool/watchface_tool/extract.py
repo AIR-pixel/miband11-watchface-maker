@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import namedtuple
+from contextlib import contextmanager
 
 from PIL import Image
 
@@ -49,11 +50,18 @@ def _gif_duration_ms(im):
     return total
 
 
-def _gif_avg_period_ms(im):
-    n = im.n_frames
-    if n <= 1:
-        return 100
-    return round(_gif_duration_ms(im) / n)
+@contextmanager
+def _tmp_dir(prefix):
+    """临时目录：退出时连同里面的帧文件一起删掉。
+
+    之前这里只 mkdtemp 不清理 —— 视频分支会在里面落 N 张**原始分辨率** PNG
+    （96 帧 1080p 约 300 MB），每生成一次表盘就泄漏一批。
+    """
+    d = tempfile.mkdtemp(prefix=prefix)
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def load_source_meta(path):
@@ -63,16 +71,16 @@ def load_source_meta(path):
     ext = os.path.splitext(path)[1].lower()
 
     if ext in GIF_EXTS:
-        im = Image.open(path)
-        return {
-            "type": "gif",
-            "size": im.size,
-            "n_frames": im.n_frames,
-            "duration_ms": _gif_duration_ms(im),
-        }
+        with Image.open(path) as im:
+            return {
+                "type": "gif",
+                "size": im.size,
+                "n_frames": im.n_frames,
+                "duration_ms": _gif_duration_ms(im),
+            }
     if ext in IMAGE_EXTS:
-        im = Image.open(path)
-        return {"type": "image", "size": im.size, "n_frames": 1, "duration_ms": 0}
+        with Image.open(path) as im:
+            return {"type": "image", "size": im.size, "n_frames": 1, "duration_ms": 0}
     if ext in VIDEO_EXTS:
         ffmpeg = find_ffmpeg()
         if not ffmpeg:
@@ -110,90 +118,101 @@ def _probe_video(ffmpeg, path):
     return w, h, dur, fps
 
 
-def extract_preview(path):
-    """抽一帧作为裁剪预览。返回 RGB Image 与素材 meta。"""
-    meta = load_source_meta(path)
+def extract_preview(path, meta=None):
+    """抽一帧作为裁剪预览。返回 RGB Image 与素材 meta。
+
+    meta 可传入已 probe 过的结果（省一次 ffmpeg -i / 一次 GIF 全帧遍历）。
+    """
+    meta = meta if meta is not None else load_source_meta(path)
     if meta["type"] == "gif":
-        im = Image.open(path)
-        im.seek(0)
-        return im.convert("RGB"), meta
+        with Image.open(path) as im:
+            im.seek(0)
+            return im.convert("RGB"), meta
     if meta["type"] == "image":
-        return Image.open(path).convert("RGB"), meta
+        with Image.open(path) as im:
+            return im.convert("RGB"), meta
     # video
-    tmp = tempfile.mkdtemp(prefix="wf_prev_")
-    out = os.path.join(tmp, "prev.png")
-    subprocess.run(
-        [meta["ffmpeg"], "-y", "-hide_banner", "-loglevel", "error",
-         "-i", path, "-frames:v", "1", out],
-        capture_output=True,
-    )
-    if not os.path.exists(out):
-        raise SourceError("ffmpeg 抽帧失败，请确认该视频文件可正常解码。")
-    return Image.open(out).convert("RGB"), meta
+    with _tmp_dir("wf_prev_") as tmp:
+        out = os.path.join(tmp, "prev.png")
+        subprocess.run(
+            [meta["ffmpeg"], "-y", "-hide_banner", "-loglevel", "error",
+             "-i", path, "-frames:v", "1", out],
+            capture_output=True,
+        )
+        if not os.path.exists(out):
+            raise SourceError("ffmpeg 抽帧失败，请确认该视频文件可正常解码。")
+        with Image.open(out) as im:
+            return im.convert("RGB"), meta
 
 
 def extract_frames(path, target_fps, max_frames=MAX_FRAMES,
-                   clip_start=0.0, clip_dur=None, speedup=False):
+                   clip_start=0.0, clip_dur=None, speedup=False, meta=None):
     """按 FramePlan 抽取帧，支持时长裁剪、总帧数上限与快放模式。
 
     clip_start: 起始时间（秒），默认 0。
     clip_dur:   截取时长（秒），None/0 表示取到素材结尾。
     speedup:    True 时保持帧率、压缩时长（播放时快放）。
+    meta:       已 probe 的素材元信息；None 则内部自己 probe 一次。
 
     返回 (frames: list[RGB Image], period_ms: int)。period_ms 是**播放**节奏。
     体积的第一杠杆是帧数 —— 8s@24fps 有 192 帧，即使 P64 也要 7.8MB。
     """
-    meta = load_source_meta(path)
+    meta = meta if meta is not None else load_source_meta(path)
 
     if meta["type"] == "image":
-        return [Image.open(path).convert("RGB")], 0
+        with Image.open(path) as im:
+            return [im.convert("RGB")], 0
 
     plan = plan_frames(meta, target_fps, max_frames, clip_start, clip_dur, speedup)
 
     if meta["type"] == "gif":
-        im = Image.open(path)
-        n = im.n_frames
-        dur_total = meta["duration_ms"]
-        # 按时间比例把 clip 区间映射到帧下标
-        cs = clip_start or 0.0
-        if dur_total > 0:
-            f0 = min(1.0, max(0.0, cs * 1000.0 / dur_total))
-            f1 = 1.0 if not clip_dur else min(1.0, (cs + clip_dur) * 1000.0 / dur_total)
-        else:
-            f0, f1 = 0.0, 1.0
-        if f1 <= f0:
-            f1 = min(1.0, f0 + 1e-3)
-        i0 = int(round(f0 * (n - 1)))
-        i1 = max(i0 + 1, int(round(f1 * (n - 1))))
-        n_out = max(1, min(plan.n, i1 - i0 + 1))
-        step = i1 - i0
-        idxs = ([i0] if n_out == 1
-                else [i0 + round(k * step / (n_out - 1)) for k in range(n_out)])
-        frames = []
-        for i in idxs:
-            im.seek(min(int(i), n - 1))
-            frames.append(im.convert("RGB"))
-        return frames, plan.period_ms
+        with Image.open(path) as im:
+            n = im.n_frames
+            dur_total = meta["duration_ms"]
+            # 按时间比例把 clip 区间映射到帧下标
+            cs = clip_start or 0.0
+            if dur_total > 0:
+                f0 = min(1.0, max(0.0, cs * 1000.0 / dur_total))
+                f1 = 1.0 if not clip_dur else min(1.0, (cs + clip_dur) * 1000.0 / dur_total)
+            else:
+                f0, f1 = 0.0, 1.0
+            if f1 <= f0:
+                f1 = min(1.0, f0 + 1e-3)
+            i0 = int(round(f0 * (n - 1)))
+            i1 = max(i0 + 1, int(round(f1 * (n - 1))))
+            n_out = max(1, min(plan.n, i1 - i0 + 1))
+            step = i1 - i0
+            idxs = ([i0] if n_out == 1
+                    else [i0 + round(k * step / (n_out - 1)) for k in range(n_out)])
+            frames = []
+            for i in idxs:
+                im.seek(min(int(i), n - 1))
+                frames.append(im.convert("RGB"))
+            return frames, plan.period_ms
 
     # video
-    tmp = tempfile.mkdtemp(prefix="wf_frames_")
-    fps_arg = (f"{plan.sample_fps:g}" if plan.sample_fps
-               else (f"{meta['fps']:g}" if meta.get("fps") else "24"))
-    outpat = os.path.join(tmp, "f_%04d.png")
-    cmd = [meta["ffmpeg"], "-y", "-hide_banner", "-loglevel", "error"]
-    if clip_start and clip_start > 0:
-        cmd += ["-ss", f"{clip_start:g}"]        # 输入 seek：快且对 mp4 足够精确
-    cmd += ["-i", path]
-    if clip_dur and clip_dur > 0:
-        cmd += ["-t", f"{clip_dur:g}"]
-    cmd += ["-vf", f"fps={fps_arg}", outpat]
-    subprocess.run(cmd, capture_output=True)
-    files = sorted(f for f in os.listdir(tmp) if f.endswith(".png"))
-    files = files[:max_frames]
-    if not files:
-        raise SourceError("ffmpeg 未抽到任何帧，请确认视频有效、时长/起始时间设置合理。")
-    frames = [Image.open(os.path.join(tmp, f)).convert("RGB") for f in files]
-    return frames, plan.period_ms
+    with _tmp_dir("wf_frames_") as tmp:
+        fps_arg = (f"{plan.sample_fps:g}" if plan.sample_fps
+                   else (f"{meta['fps']:g}" if meta.get("fps") else "24"))
+        outpat = os.path.join(tmp, "f_%04d.png")
+        cmd = [meta["ffmpeg"], "-y", "-hide_banner", "-loglevel", "error"]
+        if clip_start and clip_start > 0:
+            cmd += ["-ss", f"{clip_start:g}"]        # 输入 seek：快且对 mp4 足够精确
+        cmd += ["-i", path]
+        if clip_dur and clip_dur > 0:
+            cmd += ["-t", f"{clip_dur:g}"]
+        cmd += ["-vf", f"fps={fps_arg}", outpat]
+        subprocess.run(cmd, capture_output=True)
+        files = sorted(f for f in os.listdir(tmp) if f.endswith(".png"))
+        files = files[:max_frames]
+        if not files:
+            raise SourceError("ffmpeg 未抽到任何帧，请确认视频有效、时长/起始时间设置合理。")
+        # convert() 会触发完整解码，之后删临时目录是安全的
+        frames = []
+        for f in files:
+            with Image.open(os.path.join(tmp, f)) as im:
+                frames.append(im.convert("RGB"))
+        return frames, plan.period_ms
 
 
 def plan_frames(meta, target_fps, max_frames, clip_start=0.0, clip_dur=None,

@@ -6,34 +6,27 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Typeface;
 
-import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import face.AodFont;
 import face.AodGen;
 
 /**
- * AOD 素材绘制（Android 侧）。逻辑由 {@link AodGen} 负责，这里只把像素画出来。
+ * AOD 素材绘制（Android 侧）。数字位图用内嵌字库（{@link AodFont}）——
+ * 不再读 Canvas/Typeface 渲染：两端像素完全一致，且缩放结果可以被
+ * {@code tools/diff_face.py --stage font} 逐像素对拍。
  *
- * <h2>为什么用 ALPHA_8 而不是直接画彩色 ARGB</h2>
+ * <h2>为什么是 alpha 遮罩而不是彩色 ARGB</h2>
  * 数字/冒号是"透明底 + 单色字"。若画进 ARGB_8888，Android 内部是**预乘**存储，
  * 读回来的 RGB 会带上 alpha 权重，直接当直通 alpha 的 BGRA 用，字边缘会出现一圈暗边。
- * 改成只画 **alpha 遮罩**，再统一乘上目标颜色，就与 PC 端 PIL 的
- * "透明底 + 单色 fill" 完全同构，得到的就是直通 alpha。
- *
- * <p>字号/居中算法照抄 Python {@code aod.render_digit_images}：
- * 字号取 {@code digit_h * 0.92}，超宽时按 {@code digit_w * 0.96} 等比缩，
- * 最后按字形实际包围盒居中（不是按 advance width）。
+ * 现在拿 {@link AodFont} 给的灰度遮罩乘上目标颜色，得到的就是直通 alpha。
  */
 public final class AodRenderer {
 
     private AodRenderer() {}
-
-    /** 数字/冒号的字体。PC 端用 Arial Bold，安卓取同族的 Roboto Bold。 */
-    private static final Typeface FONT = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
 
     /**
      * 画出控件表引用到的全部素材。
@@ -99,63 +92,16 @@ public final class AodRenderer {
     // ------------------------------------------------------------------ 数字
 
     private static byte[] digit(int dw, int dh, int digit, int[] rgb) {
-        // 掩码取 alpha，颜色统一后加 —— 与 PIL 的"透明底 + 单色 fill"同构
-        return drawMask(dw, dh, rgb, new MaskPainter() {
-            @Override
-            public void paint(Canvas cv, Paint p, int w, int h) {
-                String ch = String.valueOf(digit);
-                Rect b = new Rect();
-                float size = Math.max(6, (int) (h * 0.92f));
-                p.setTextSize(size);
-                p.getTextBounds(ch, 0, 1, b);
-                int tw = b.width();
-                if (tw > w * 0.96f && tw > 0) {                       // 超宽就等比缩字号
-                    size = size * ((w * 0.96f) / tw);
-                    p.setTextSize(Math.max(6, size));
-                    p.getTextBounds(ch, 0, 1, b);
-                }
-                // 按字形实际包围盒居中（横竖都比 PIL 的 tight bbox 居中）
-                float x = (w - b.width()) / 2f - b.left;
-                float baseline = h / 2f - (b.top + b.bottom) / 2f;
-                cv.drawText(ch, x, baseline, p);
-            }
-        });
+        return AodGen.maskToBgra(
+            AodFont.fit(AodFont.glyph(digit), AodFont.GLYPH_W, AodFont.GLYPH_H, dw, dh),
+            rgb[0], rgb[1], rgb[2]);
     }
 
     // ------------------------------------------------------------------ 冒号
 
-    /** 时:分 / 月:日 之间的冒号：上下两个圆点（照抄 Python render_colon_image）。 */
     private static byte[] colon(int w, int h, int[] rgb) {
-        return drawMask(w, h, rgb, new MaskPainter() {
-            @Override
-            public void paint(Canvas cv, Paint p, int w2, int h2) {
-                float r = Math.max(2, (int) (w2 * 0.32f));
-                float cx = w2 / 2f;
-                p.setStyle(Paint.Style.FILL);
-                for (int cy : new int[]{(int) (h2 * 0.34f), (int) (h2 * 0.66f)}) {
-                    cv.drawCircle(cx, cy, r, p);
-                }
-            }
-        });
-    }
-
-    // ------------------------------------------------------------------ 公共
-
-    private interface MaskPainter {
-        void paint(Canvas cv, Paint p, int w, int h);
-    }
-
-    /** 在 ALPHA_8 位图上画遮罩，再乘上固定颜色，得到直通 alpha 的 BGRA。 */
-    private static byte[] drawMask(int w, int h, int[] rgb, MaskPainter mp) {
-        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8);
-        Canvas cv = new Canvas(bmp);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.WHITE);                  // ALPHA_8 下只取 alpha
-        p.setTypeface(FONT);
-        mp.paint(cv, p, w, h);
-        ByteBuffer buf = ByteBuffer.allocate(w * h);
-        bmp.copyPixelsToBuffer(buf);
-        bmp.recycle();
-        return AodGen.maskToBgra(buf.array(), rgb[0], rgb[1], rgb[2]);
+        return AodGen.maskToBgra(
+            AodFont.fit(AodFont.colon(), AodFont.COLON_W, AodFont.COLON_H, w, h),
+            rgb[0], rgb[1], rgb[2]);
     }
 }

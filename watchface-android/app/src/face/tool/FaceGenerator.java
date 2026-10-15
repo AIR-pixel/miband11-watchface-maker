@@ -75,17 +75,15 @@ public final class FaceGenerator {
         public double playSeconds() { return nFrames * periodMs / 1000.0; }
     }
 
-    public static Plan planFrames(double durationMs, int fps, double clipStart,
-                                  double clipDur, int maxFrames) {
-        return planFrames(durationMs, fps, clipStart, clipDur, maxFrames, false);
-    }
-
     /**
      * 在真正抽帧前规划帧数与播放节奏。
      * speedup=false：超上限时自动降帧率，播放时长不变；
      * speedup=true ：帧率不变，把 maxFrames 帧摊到整段时长上，播放时快放。
+     *
+     * <p>fps 用 double：素材真实帧率常常不是整数（29.97 / 23.976），
+     * 取整会让长素材的帧数偏掉几帧。
      */
-    public static Plan planFrames(double durationMs, int fps, double clipStart,
+    public static Plan planFrames(double durationMs, double fps, double clipStart,
                                   double clipDur, int maxFrames, boolean speedup) {
         double totalS = durationMs / 1000.0;
         double f = fps > 0 ? fps : 24.0;
@@ -163,58 +161,77 @@ public final class FaceGenerator {
         if (o.walls.isEmpty()) throw new IllegalArgumentException("至少需要一张壁纸");
         final int nWalls = o.walls.size();
 
-        int colors; boolean dither;
+        final int colors; final boolean dither;
         { int[] ld = levelParams(o.level); colors = ld[0]; dither = ld[1] != 0; }
-        String ext = "jpg".equals(o.fmt) ? "jpg" : "png";
+        final String ext = "jpg".equals(o.fmt) ? "jpg" : "png";
 
-        List<FaceBuilder.FileEntry> files = new ArrayList<FaceBuilder.FileEntry>();
+        final List<FaceBuilder.FileEntry> files = new ArrayList<FaceBuilder.FileEntry>();
         List<LuaGen.Wall> luaWalls = new ArrayList<LuaGen.Wall>();
-        byte[] previewBgra = null;
+        final byte[][] previewHolder = new byte[1][];
         int totalFrames = 0;
 
         for (int wi = 0; wi < nWalls; wi++) {
-            WallSpec ws = o.walls.get(wi);
-            String tag = nWalls > 1 ? ("壁纸 " + (wi + 1) + "/" + nWalls) : "";
+            final WallSpec ws = o.walls.get(wi);
+            final int fwi = wi;
+            final String tag = nWalls > 1 ? ("壁纸 " + (wi + 1) + "/" + nWalls) : "";
             float base = 0.05f + 0.75f * wi / nWalls;
-            cb.onProgress(base, "读取素材…" + tag);
+            prog(cb, base, "读取素材…" + tag);
 
             double durMs = probeDurationMs(ctx, ws.uri, ws.srcType);
-            Plan plan = planFrames(durMs, ws.fps, ws.clipStart, ws.clipDur,
-                                   ws.maxFrames, ws.speedup);
+            // 用户没指定帧率时读素材真实帧率，读不到才退回 24（与 PC 端一致）。
+            // 之前这里一律写死 24，同一个素材两端算出的帧数会不一样。
+            final double fps = ws.fps > 0 ? ws.fps : probeFrameRate(ctx, ws.uri, ws.srcType);
+            final Plan plan = planFrames(durMs, fps, ws.clipStart, ws.clipDur,
+                                         ws.maxFrames, ws.speedup);
             if (nWalls == 1 && plan.speedMult() > 1.01) {
-                cb.onProgress(0.08f, String.format(
+                prog(cb, 0.08f, String.format(
                     "快放模式：%d 帧覆盖 %.1fs，按 %.0ffps 播放 ≈ %.1fs（%.1f 倍速）",
                     plan.nFrames, plan.spanSec, plan.playFps, plan.playSeconds(), plan.speedMult()));
-            } else if (nWalls == 1 && ws.fps > 0 && Math.abs(plan.playFps - ws.fps) >= 1) {
-                cb.onProgress(0.08f, String.format(
-                    "时长 %.1fs x %dfps 超过帧数上限 %d，自动降到 %.1ffps（时长不变）",
-                    plan.spanSec, ws.fps, ws.maxFrames, plan.playFps));
+            } else if (nWalls == 1 && fps > 0 && Math.abs(plan.playFps - fps) >= 1) {
+                prog(cb, 0.08f, String.format(
+                    "时长 %.1fs x %.0ffps 超过帧数上限 %d，自动降到 %.1ffps（时长不变）",
+                    plan.spanSec, fps, ws.maxFrames, plan.playFps));
             }
 
-            List<Bitmap> frames = extractFrames(ctx, ws.uri, ws.srcType, plan, ws.clipStart);
-            int n = frames.size();
-            String prefix = wi == 0 ? "face" : ("w" + (wi + 1));
-
-            for (int i = 0; i < n; i++) {
-                Bitmap cropped = cropScale(frames.get(i), ws.crop);
-                byte[] data = encodeFrame(cropped, colors, dither, o.fmt, o.jpgQuality);
-                files.add(new FaceBuilder.FileEntry(
-                    String.format("lua/%s_%02d.%s", prefix, i + 1, ext), data));
-                if (wi == 0 && i == 0) previewBgra = toBgra(cropped);
-                if (cropped != frames.get(i)) cropped.recycle();
-                cb.onProgress(base + 0.75f * (wi + (i + 1) / (float) Math.max(1, n)) / nWalls,
-                              "处理" + tag + " 帧 " + (i + 1) + "/" + n);
+            final int[] nOut = {0};
+            FrameSink sink = new FrameSink() {
+                @Override public void accept(Bitmap raw) {
+                    // 边抽边编码边回收：原实现先把全部原始分辨率帧攒进 List，
+                    // 96 帧 1080p 就是约 800 MB，直接 OOM。
+                    Bitmap cropped = cropScale(raw, ws.crop);
+                    try {
+                        byte[] data = encodeFrame(cropped, colors, dither, o.fmt, o.jpgQuality);
+                        files.add(new FaceBuilder.FileEntry(
+                            String.format("lua/%s_%02d.%s", wallPrefix(fwi), nOut[0] + 1, ext),
+                            data));
+                        if (fwi == 0 && nOut[0] == 0) previewHolder[0] = toBgra(cropped);
+                    } finally {
+                        if (cropped != raw) cropped.recycle();
+                    }
+                    nOut[0]++;
+                    prog(cb, 0.05f + 0.75f * (fwi + nOut[0] / (float) Math.max(1, plan.nFrames))
+                              / nWalls,
+                         "处理" + tag + " 帧 " + nOut[0] + "/" + plan.nFrames);
+                }
+            };
+            forEachFrame(ctx, ws.uri, ws.srcType, plan, ws.clipStart, sink);
+            if (nOut[0] == 0) {
+                // 一帧都没抽到（MediaMetadataRetriever 啃不动的素材）：退回整图
+                Bitmap b = BitmapFactory.decodeStream(
+                    ctx.getContentResolver().openInputStream(ws.uri));
+                if (b != null) {
+                    try { sink.accept(b); } finally { if (!b.isRecycled()) b.recycle(); }
+                }
             }
-            for (Bitmap f : frames) if (!f.isRecycled()) f.recycle();
 
-            luaWalls.add(new LuaGen.Wall(prefix, n, plan.periodMs));
-            totalFrames += n;
+            luaWalls.add(new LuaGen.Wall(wallPrefix(wi), nOut[0], plan.periodMs));
+            totalFrames += nOut[0];
         }
 
-        if (previewBgra == null) previewBgra = blackBgra();
+        byte[] previewBgra = previewHolder[0] != null ? previewHolder[0] : blackBgra();
 
         // ---- main.lua ----
-        cb.onProgress(0.82f, "生成脚本…");
+        prog(cb, 0.82f, "生成脚本…");
         o.lua.walls = luaWalls;
         o.lua.periodMs = luaWalls.get(0).periodMs;
         o.lua.ext = ext;
@@ -226,15 +243,25 @@ public final class FaceGenerator {
         boolean hasAod = o.aod != null && o.aod.enabled;
         List<FaceBuilder.Rec> aodRecs = null;
         if (hasAod) {
-            cb.onProgress(0.90f, "生成息屏素材…");
+            prog(cb, 0.90f, "生成息屏素材…");
             List<AodGen.Widget> widgets = AodGen.planAll(o.aod);
             Map<String, AodGen.Img> imgs = AodRenderer.render(widgets, o.aodBg, o.aod.color);
             aodRecs = AodGen.buildRecords(widgets, imgs);
         }
 
-        cb.onProgress(0.95f, "打包 .face…");
+        prog(cb, 0.95f, "打包 .face…");
         String faceId = o.faceId != null && !o.faceId.isEmpty() ? o.faceId : autoFaceId();
         return FaceBuilder.build(o.title, faceId, files, previewBgra, hasAod, aodRecs);
+    }
+
+    /** 进度回调：cb 为 null 时安静跳过（调用方不该因为不关心进度就 NPE）。 */
+    private static void prog(Progress cb, float frac, String msg) {
+        if (cb != null) cb.onProgress(frac, msg);
+    }
+
+    /** 壁纸文件名前缀：第 1 张沿用 face（与单壁纸版本字节兼容），第 2 张起 w2、w3… */
+    private static String wallPrefix(int index) {
+        return index == 0 ? "face" : ("w" + (index + 1));
     }
 
     /** 旧签名（单壁纸、无 AOD）。 */
@@ -262,8 +289,20 @@ public final class FaceGenerator {
      */
     public static long estimateWallBytes(Context ctx, Uri uri, String srcType, int[] crop,
                                          String level, String fmt, int nFrames, int jpgQuality) {
+        return estimateWallBytes(ctx, uri, srcType, crop, level, fmt, nFrames, jpgQuality, null);
+    }
+
+    /**
+     * 带预览帧缓存的版本。
+     *
+     * <p>UI 的体积预估会被反复调用（每改一个参数都要重算），每次都重新解码视频
+     * 首帧很浪费 —— 调用方把已经解码好的首帧传进来即可。传 null 就自己解码。
+     */
+    public static long estimateWallBytes(Context ctx, Uri uri, String srcType, int[] crop,
+                                         String level, String fmt, int nFrames, int jpgQuality,
+                                         Bitmap cachedPreview) {
         try {
-            Bitmap b = previewFrame(ctx, uri, srcType);
+            Bitmap b = cachedPreview != null ? cachedPreview : previewFrame(ctx, uri, srcType);
             if (b == null) return 0;
             Bitmap c = cropScale(b, crop);
             int[] ld = levelParams(level);
@@ -317,33 +356,61 @@ public final class FaceGenerator {
         }
     }
 
-    private static List<Bitmap> extractFrames(Context ctx, Uri uri, String srcType,
-                                              Plan plan, double clipStart) throws Exception {
-        List<Bitmap> out = new ArrayList<>();
+    /** 逐帧消费：抽到一张就交给 sink 处理掉，不让整批帧驻留内存。 */
+    private interface FrameSink {
+        void accept(Bitmap raw);
+    }
+
+    /**
+     * 抽帧并逐帧交给 sink。
+     *
+     * <p>不返回 List：原始分辨率的帧攒在内存里是 OOM 的头号来源
+     * （96 帧 1080p ≈ 800 MB）。sink 返回后原帧立即回收。
+     */
+    private static void forEachFrame(Context ctx, Uri uri, String srcType, Plan plan,
+                                     double clipStart, FrameSink sink) throws Exception {
         if ("image".equals(srcType)) {
             Bitmap b = BitmapFactory.decodeStream(ctx.getContentResolver().openInputStream(uri));
-            if (b != null) out.add(b);
-            return out;
+            if (b != null) {
+                try { sink.accept(b); } finally { if (!b.isRecycled()) b.recycle(); }
+            }
+            return;
         }
         double sampleFps = plan.sampleFps > 0 ? plan.sampleFps : 24.0;
         MediaMetadataRetriever mmr = new MediaMetadataRetriever();
         try {
             mmr.setDataSource(ctx, uri);
-            int n = plan.nFrames;
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < plan.nFrames; i++) {
                 long tUs = (long) ((clipStart + i / sampleFps) * 1_000_000L);
                 Bitmap f = mmr.getFrameAtTime(tUs, MediaMetadataRetriever.OPTION_CLOSEST);
-                if (f != null) out.add(f);
+                if (f == null) continue;
+                try { sink.accept(f); } finally { if (!f.isRecycled()) f.recycle(); }
             }
         } finally {
             try { mmr.release(); } catch (Throwable ignored) {}
         }
-        if (out.isEmpty()) {
-            // 视频抽帧失败则退回整图（可能是个 gif，MediaMetadataRetriever 抽不到帧）
-            Bitmap b = BitmapFactory.decodeStream(ctx.getContentResolver().openInputStream(uri));
-            if (b != null) out.add(b);
+    }
+
+    /**
+     * 素材真实帧率；拿不到返回 0（调用方退回 24）。
+     * PC 端会读源帧率，安卓端之前一律写死 24，两端帧数对不上。
+     */
+    public static double probeFrameRate(Context ctx, Uri uri, String srcType) {
+        if ("image".equals(srcType)) return 0;
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        try {
+            mmr.setDataSource(ctx, uri);
+            String s = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE);
+            if (s != null) {
+                double v = Double.parseDouble(s);
+                if (v > 0) return v;
+            }
+        } catch (Exception ignored) {
+            // 拿不到就退回默认
+        } finally {
+            try { mmr.release(); } catch (Throwable ignored) {}
         }
-        return out;
+        return 0;
     }
 
     // ---- 帧处理 ----

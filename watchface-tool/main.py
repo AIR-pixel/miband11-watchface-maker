@@ -61,7 +61,6 @@ def _cli(argv):
     p.add_argument("--aod-time-y", type=int, default=200, help="AOD 时间行 Y")
     p.add_argument("--aod-date-y", type=int, default=300, help="AOD 日期行 Y")
     p.add_argument("--aod-color", default="#FFFFFF", help="AOD 数字颜色 #RRGGBB")
-    p.add_argument("--aod-font", default=None, help="AOD 数字字体 TTF 路径")
     args = p.parse_args(argv)
 
     crop_box = None
@@ -103,7 +102,6 @@ def _cli(argv):
             "time_y": args.aod_time_y,
             "date_y": args.aod_date_y,
             "color": args.aod_color,
-            "font_path": args.aod_font,
         },
         output_dir=args.out,
         clip_start=args.clip_start,
@@ -115,20 +113,9 @@ def _cli(argv):
         progress=lambda f, m: print(f"[{f * 100:5.1f}%] {m}"),
     )
     print(f"\n完成: {r.face_path}")
-    speed_txt = ""
-    if getattr(r, "speed_mult", 1.0) > 1.01:
-        speed_txt = (f" · 覆盖 {r.span_seconds:.1f}s 快放 {r.speed_mult:.1f}x"
-                     f"（播放 {r.play_seconds:.1f}s）")
-    elif getattr(r, "play_seconds", 0):
-        speed_txt = f" · 播放 {r.play_seconds:.1f}s"
-    fmt_txt = "PNG" if r.fmt == "png" else f"JPEG q{r.jpg_quality}"
-    extra = []
-    if getattr(r, "n_walls", 1) > 1:
-        extra.append(f"{r.n_walls} 张壁纸")
-    if getattr(r, "aod_enabled", False):
-        extra.append(f"AOD +{r.aod_bytes / 1024:.0f} KB")
-    extra_txt = (" · " + " · ".join(extra)) if extra else ""
-    print(f"{r.n_frames} 帧 @ {r.effective_fps:.1f}fps · "
+    # 与 GUI 共用同一套摘要格式
+    fps_txt, fmt_txt, speed_txt, extra_txt = pipeline.format_result(r)
+    print(f"{r.n_frames} 帧 @ {fps_txt} · "
           f"{r.face_size / 1048576:.2f} MB · {r.level_label} · {fmt_txt}"
           f"{speed_txt}{extra_txt}")
 

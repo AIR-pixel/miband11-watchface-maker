@@ -8,13 +8,14 @@
 只测了一种样本导致三个分支从没被执行过）都是这个回归抓出来的。
 详见 `docs/项目经验.md` 的 Bug 4/5/6 与 §5。
 
-三个阶段（缺一不可）：
+三个阶段 + 一个字库对拍（缺一不可）：
 
 | 阶段 | 比什么 | Python 侧 | JVM 侧 |
 |---|---|---|---|
 | `lua` | 生成的 `main.lua` 全文 | `watchface_tool/lua.py`（生产） | `LuaGen.java` |
 | `aod` | AOD 控件表 + 描述块全部记录 | `aod.py` 真跑 build_aod 回读 fprj + 参考记录实现 | `AodGen.java` |
 | `asm` | **整份 `.face` 的每一个字节** | `tools/diff/reference.py` 的参考 packer | `FaceBuilder.java` |
+| `font` | **AOD 数字的每一个像素** | `watchface_tool/aod_font.py` 的 `fit()` | `AodFont.java` |
 
 用法：
 
@@ -43,7 +44,7 @@ DIFF = os.path.join(HERE, "diff")
 JVM_SRC = os.path.join(REPO, "watchface-android", "core", "face")
 JVM_DRV = os.path.join(DIFF, "jvm")
 
-STAGES = ("lua", "aod", "asm")
+STAGES = ("lua", "aod", "asm", "font")
 
 
 # ------------------------------------------------------------------ 基础设施
@@ -117,7 +118,7 @@ def diff_report(want, got, label_w, label_g):
     return "\n".join(out)
 
 
-# ------------------------------------------------------------------ 三个阶段
+# ------------------------------------------------------------------ 四个阶段
 
 def stage_lua(java, classes, work):
     from diff import reference                                    # noqa: PLC0415
@@ -239,6 +240,64 @@ def stage_asm(java, classes, work):
     return ok, len(cases)
 
 
+def stage_font(java, classes, work):
+    """AOD 数字位图逐像素对拍。
+
+    字形是同一份数据（tools/gen_aod_font.py 生成两端），所以这里比的其实是
+    **缩放算法**：双线性采样的取整、越界、0.96 宽度钳制。以前两端各用系统字体
+    （PC: Arial Bold / 安卓: Roboto Bold + android.graphics），像素根本没法比。
+    """
+    sys.path.insert(0, os.path.join(REPO, "watchface-tool"))
+    from watchface_tool import aod_font                            # noqa: PLC0415
+
+    cases = _load_font_cases(os.path.join(DIFF, "font_cases.txt"))
+    py_dir, jv_dir = os.path.join(work, "py", "font"), os.path.join(work, "jvm", "font")
+    os.makedirs(py_dir, exist_ok=True)
+
+    print("== 阶段 font：AOD 数字位图逐像素 ==")
+    for c in cases:
+        if c["kind"] == "colon":
+            mask = aod_font.fit(aod_font.colon(), aod_font.COLON_W, aod_font.COLON_H,
+                                c["w"], c["h"])
+        else:
+            mask = aod_font.fit(aod_font.glyph(c["value"]),
+                                aod_font.GLYPH_W, aod_font.GLYPH_H, c["w"], c["h"])
+        with open(os.path.join(py_dir, c["name"] + ".bin"), "wb") as f:
+            f.write(mask)
+
+    run([java, "-cp", classes, "DiffMain", "font",
+         os.path.join(DIFF, "font_cases.txt"), jv_dir])
+
+    ok = 0
+    for c in cases:
+        a = open(os.path.join(py_dir, c["name"] + ".bin"), "rb").read()
+        b = open(os.path.join(jv_dir, c["name"] + ".bin"), "rb").read()
+        d = diff_report(a, b, "py", "java")
+        ink = sum(1 for x in a if x > 0)
+        if d is None:
+            ok += 1
+            print("  %-10s %3dx%-3d %6d B  着色 %4d px  一致 ✓"
+                  % (c["name"], c["w"], c["h"], len(a), ink))
+        else:
+            print("  %-10s 不一致 ✗" % c["name"])
+            print(d)
+    return ok, len(cases)
+
+
+def _load_font_cases(path):
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            t = raw.strip()
+            if not t or t.startswith("#"):
+                continue
+            name, kind, value, w, h = t.split("|")
+            out.append({"name": name, "kind": kind,
+                        "value": int(value) if value != "-" else -1,
+                        "w": int(w), "h": int(h)})
+    return out
+
+
 # ------------------------------------------------------------------ 入口
 
 def main():
@@ -273,7 +332,8 @@ def main():
         total_ok = total = 0
         failed = []
         for stage in want:
-            fn = {"lua": stage_lua, "aod": stage_aod, "asm": stage_asm}[stage]
+            fn = {"lua": stage_lua, "aod": stage_aod, "asm": stage_asm,
+                  "font": stage_font}[stage]
             ok, n = fn(java, classes, work)
             total_ok += ok
             total += n

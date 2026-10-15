@@ -4,7 +4,7 @@
 **Python 参考实现**。
 
 ```bash
-python tools/diff_face.py            # 三个阶段全跑（约 35 s）
+python tools/diff_face.py            # 四个阶段全跑（约 40 s）
 python tools/diff_face.py --stage asm --keep
 ```
 
@@ -14,20 +14,22 @@ python tools/diff_face.py --stage asm --keep
 
 | 文件 | 作用 |
 |---|---|
-| `../diff_face.py` | 入口：编译 JVM 侧、跑三个阶段、比对、汇总 |
+| `../diff_face.py` | 入口：编译 JVM 侧、跑四个阶段、比对、汇总 |
 | `lua_cases.txt` | LuaGen 用例，12 例，20 字段 |
 | `aod_cases.txt` | AOD 用例，12 例，13 字段 |
 | `assemble_cases.txt` | 装配用例，21 例，5 字段 |
-| `jvm/DiffMain.java` | JVM 侧驱动（`lua` / `aod` / `asm` 三个模式） |
+| `font_cases.txt` | AOD 字库用例，26 例，5 字段（生产 10×2 + 冒号 2 + 边界 6） |
+| `jvm/DiffMain.java` | JVM 侧驱动（`lua` / `aod` / `asm` / `font` 四个模式） |
 | `reference.py` | Python 参考侧：用例解析、记录推导、参考 packer |
 
-## 三个阶段各测什么
+## 四个阶段各测什么
 
 | 阶段 | 比对对象 | Python 侧 | JVM 侧 | 例数 |
 |---|---|---|---|---|
 | `lua` | `main.lua` **全文** | `watchface_tool/lua.py`（生产代码） | `LuaGen.java` | 12 |
 | `aod` | AOD **控件表 + 描述块全部记录** | 真跑 `aod.build_aod()` 再**回读它写出的 fprj** ＋ 参考记录实现 | `AodGen.java` | 12 |
 | `asm` | **整份 `.face` 的每一个字节** | `reference.py` 的参考 packer | `FaceBuilder.java` | 21 |
+| `font` | **AOD 数字位图每一个像素** | `watchface_tool/aod_font.py` 的 `fit()` | `AodFont.java` | 26 |
 
 `aod` 阶段刻意**回读 fprj**，而不是另写一份布局算法 —— 那样测到的才是生产路径。
 

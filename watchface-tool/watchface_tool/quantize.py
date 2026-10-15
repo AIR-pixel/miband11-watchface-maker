@@ -22,6 +22,10 @@ from PIL import Image
 from .constants import (COMPRESS_LEVELS, ENCODE_FORMATS, JPG_QUALITY,
                         JPG_SUBSAMPLING)
 
+# 头部 + 元数据 + 预览图的固定开销（粗估，真实约 431 KB）。
+# 独立成常量：多壁纸时它只能算一次，不能跟着壁纸数翻。
+HEADER_OVERHEAD = 300 * 1024
+
 
 def quantize_frame(img_rgb, level):
     """返回处理后的 Image（RGB 或 P 模式）。"""
@@ -64,7 +68,7 @@ def frame_size_bytes(img, level, fmt="png", jpg_quality=JPG_QUALITY):
     return len(_encode(quantize_frame(img, level), fmt, jpg_quality))
 
 
-def estimate_total_bytes(img_rgb, level, fmt, n_frames, header_overhead=300 * 1024,
+def estimate_total_bytes(img_rgb, level, fmt, n_frames, header_overhead=HEADER_OVERHEAD,
                          jpg_quality=JPG_QUALITY):
     """预估整个 .face 的体积：首帧真实编码字节 x 帧数 + 头部/预览图开销。
 
