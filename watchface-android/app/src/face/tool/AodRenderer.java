@@ -53,7 +53,11 @@ public final class AodRenderer {
             byte[] bgra;
             if ("aod_bg.png".equals(name)) {
                 bgra = background(w, h, customBg);
-            } else if (name.startsWith("aod_colon") || name.startsWith("aod_dcolon")) {
+            } else if ("aod_dcolon.png".equals(name)) {
+                // 月日之间画句点（文件名沿用 dcolon）。以前和冒号共用一张图，
+                // 日期显示成 10:22，跟时间行撞脸。
+                bgra = dot(w, h, rgb);
+            } else if (name.startsWith("aod_colon")) {
                 bgra = colon(w, h, rgb);
             } else {
                 int d = name.charAt(6) - '0';                 // aod_t_07.png / aod_d_07.png
@@ -102,6 +106,15 @@ public final class AodRenderer {
     private static byte[] colon(int w, int h, int[] rgb) {
         return AodGen.maskToBgra(
             AodFont.fit(AodFont.colon(), AodFont.COLON_W, AodFont.COLON_H, w, h),
+            rgb[0], rgb[1], rgb[2]);
+    }
+
+    // ------------------------------------------------------------------ 日期分隔句点
+
+    /** 与冒号同一套字模画布，只有一个点，底边压在数字基线上。 */
+    private static byte[] dot(int w, int h, int[] rgb) {
+        return AodGen.maskToBgra(
+            AodFont.fit(AodFont.dot(), AodFont.COLON_W, AodFont.COLON_H, w, h),
             rgb[0], rgb[1], rgb[2]);
     }
 }

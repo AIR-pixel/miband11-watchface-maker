@@ -222,12 +222,15 @@ public final class DiffMain {
         for (String[] f : rows(cases)) {
             if (f.length != 5) throw new IllegalStateException("font 用例字段数 " + f.length);
             String name = f[0];
-            boolean isColon = "colon".equals(f[1]);
+            String kind = f[1];
             int w = Integer.parseInt(f[3]);
             int h = Integer.parseInt(f[4]);
             byte[] mask;
-            if (isColon) {
+            if ("colon".equals(kind)) {
                 mask = face.AodFont.fit(face.AodFont.colon(),
+                                        face.AodFont.COLON_W, face.AodFont.COLON_H, w, h);
+            } else if ("dot".equals(kind)) {
+                mask = face.AodFont.fit(face.AodFont.dot(),
                                         face.AodFont.COLON_W, face.AodFont.COLON_H, w, h);
             } else {
                 int d = Integer.parseInt(f[2]);

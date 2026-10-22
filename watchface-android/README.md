@@ -151,11 +151,11 @@ dex +252 B；APK 总大小与 v2.1.0 恰好相同（deflate 后的巧合，不�
 
 ## 安装
 
-下载 [watchface-tool-android-v2.1.1.apk](../../releases/latest/download/watchface-tool-android-v2.1.1.apk)。
+下载 [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk)。
 
 - 系统要求：**Android 7.0+**（minSdk 24 / targetSdk 34）
 - 安装时系统可能提示「未知来源应用」，需在设置里允许
-- 包名 `face.tool`，launcher 名「表盘制作」，APK 内版本 `2.1.1`（versionCode 211）
+- 包名 `face.tool`，launcher 名「表盘制作」，APK 内版本 `2.2.1`（versionCode 221）
 
 ## 使用
 

@@ -259,6 +259,9 @@ def stage_font(java, classes, work):
         if c["kind"] == "colon":
             mask = aod_font.fit(aod_font.colon(), aod_font.COLON_W, aod_font.COLON_H,
                                 c["w"], c["h"])
+        elif c["kind"] == "dot":
+            mask = aod_font.fit(aod_font.dot(), aod_font.COLON_W, aod_font.COLON_H,
+                                c["w"], c["h"])
         else:
             mask = aod_font.fit(aod_font.glyph(c["value"]),
                                 aod_font.GLYPH_W, aod_font.GLYPH_H, c["w"], c["h"])

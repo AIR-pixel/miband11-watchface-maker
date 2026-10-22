@@ -91,6 +91,15 @@ def render_colon_image(w=AOD_COLON_W, h=AOD_TIME_DIGIT_H, color=(255, 255, 255, 
     return _colored(alpha, w, h, color)
 
 
+def render_dot_image(w=AOD_COLON_W, h=AOD_DATE_DIGIT_H, color=(255, 255, 255, 255)):
+    """月.日之间的句点（同样是一张 Shape=30 小图，只是画成一个点）。
+
+    以前这里复用冒号，日期显示成 `10:22`，跟时间行撞脸。
+    """
+    alpha = aod_font.fit(aod_font.dot(), aod_font.COLON_W, aod_font.COLON_H, w, h)
+    return _colored(alpha, w, h, color)
+
+
 # --------------------------------------------------------------------------- 体积模型
 
 def estimate_aod_bytes(cfg):
@@ -282,6 +291,9 @@ def build_aod(workdir, cfg, progress=None):
         if w["kind"] == 30:
             if w["img"] == "aod_bg.png":
                 _save_bg(img_dir, cfg)
+            elif w["img"] == "aod_dcolon.png":
+                # 文件名沿用 dcolon（打包器/安卓/网页都认这个名字），画的是日期分隔句点
+                render_dot_image(w["w"], w["h"], color).save(os.path.join(img_dir, w["img"]))
             else:
                 render_colon_image(w["w"], w["h"], color).save(os.path.join(img_dir, w["img"]))
             n_written += 1
@@ -346,7 +358,7 @@ def _glyph_set(color):
         render_digit_images(AOD_TIME_DIGIT_W, AOD_TIME_DIGIT_H, color),
         render_digit_images(AOD_DATE_DIGIT_W, AOD_DATE_DIGIT_H, color),
         render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color),
-        render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color),
+        render_dot_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color),
     )
     _GLYPH_CACHE["key"], _GLYPH_CACHE["val"] = key, val
     return val
@@ -370,7 +382,7 @@ def render_preview(cfg, sample_time="09:41", sample_date="07/18"):
     tmode = cfg.get("time_mode", "time")
     parts, _ = plan_aod_layout(cfg)
 
-    tdig, ddig, colon_t, colon_d = _glyph_set(color)
+    tdig, ddig, colon_t, dot_d = _glyph_set(color)
 
     text_t = [c for c in sample_time if c.isdigit()]
     text_d = [c for c in sample_date if c.isdigit()]
@@ -378,7 +390,7 @@ def render_preview(cfg, sample_time="09:41", sample_date="07/18"):
     for kind, payload in parts:
         if kind == "img":
             name, fname, x, y, w, h, group = payload
-            im = colon_t if group == "time" else colon_d
+            im = colon_t if group == "time" else dot_d
             base.paste(im, (x, y), im)
             continue
         name, x, y, dw, dh, digits, src, _files, group = payload

@@ -85,8 +85,8 @@
 | 平台 | 下载 | 说明 |
 |---|---|---|
 | **网页版** | <https://miband-watchface.app.workbuddy.host/> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
-| **安卓** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | 直接安装。Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
+| **安卓** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | 直接安装。Android 7.0+（minSdk 24） |
+| **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
 
 > 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。
 
@@ -389,7 +389,7 @@ python main.py
 
 ### 安卓版
 
-**1. 安装** —— 下载 [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) 安装（Android 7.0+）。
+**1. 安装** —— 下载 [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) 安装（Android 7.0+）。
 
 **2. 操作流程** —— 同样是两页签 + 底部固定生成按钮。
 

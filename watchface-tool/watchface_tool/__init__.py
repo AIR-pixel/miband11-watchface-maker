@@ -6,4 +6,4 @@
 """
 
 # 与 AndroidManifest 的 versionName / Release 版本号保持一致
-__version__ = "2.2.0"
+__version__ = "2.2.1"

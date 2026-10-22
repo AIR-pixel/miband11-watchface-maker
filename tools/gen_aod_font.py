@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""生成 AOD 内嵌字库（数字 0-9 + 冒号），同时写出 Java 与 Python 两侧。
+"""生成 AOD 内嵌字库（数字 0-9 + 冒号 + 句点），同时写出 Java 与 Python 两侧。
 
 ## 为什么要有这个
 
@@ -39,7 +39,7 @@ JAVA_OUT = os.path.join(REPO, "watchface-android", "core", "face", "AodFont.java
 PY_OUT = os.path.join(REPO, "watchface-tool", "watchface_tool", "aod_font.py")
 
 # 字模画布。数字取 40x64（覆盖最大的 AOD 时间数字 46x64 的高度），
-# 冒号取 12x64（对应 AOD_COLON_W=12）。缩放时按高度等比，不变形。
+# 冒号/句点共用 12x64（对应 AOD_COLON_W=12）。缩放时按高度等比，不变形。
 GLYPH_W, GLYPH_H = 40, 64
 COLON_W, COLON_H = 12, 64
 
@@ -86,7 +86,7 @@ def render_digit(d):
 
 
 def render_colon():
-    """时:分 / 月:日 之间的冒号：上下两个圆点。"""
+    """时:分 之间的冒号：上下两个圆点。"""
     big_w, big_h = COLON_W * SS, COLON_H * SS
     im = Image.new("L", (big_w, big_h), 0)
     dr = ImageDraw.Draw(im)
@@ -94,6 +94,23 @@ def render_colon():
     cx = big_w / 2.0
     for cy in (int(big_h * 0.34), int(big_h * 0.66)):
         dr.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    return im.resize((COLON_W, COLON_H), Image.LANCZOS)
+
+
+def render_dot():
+    """月.日 之间的句点：一个圆点，**底边压在数字基线上**。
+
+    以前月日之间复用冒号，显示成 `10:22`，看着像第二行时间。
+    半径与冒号那两个点一致（不重新起一套视觉），只把它挪到基线：
+    数字墨迹实测占第 8..55 行，所以点占 50..56 行。
+    """
+    big_w, big_h = COLON_W * SS, COLON_H * SS
+    im = Image.new("L", (big_w, big_h), 0)
+    dr = ImageDraw.Draw(im)
+    r = max(2, int(COLON_W * 0.32)) * SS
+    cx = big_w / 2.0
+    cy = int(big_h * 0.875) - r
+    dr.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
     return im.resize((COLON_W, COLON_H), Image.LANCZOS)
 
 
@@ -110,7 +127,7 @@ def fmt_java_str_list(hexstr, per_line=96, indent="            "):
     return "\n".join('%s"%s" +' % (indent, p) for p in parts)
 
 
-def gen_java(digits_hex, colon_hex):
+def gen_java(digits_hex, colon_hex, dot_hex):
     def const(name, hexstr, w, h):
         body = fmt_java_str_list(hexstr)
         body = body.rstrip(" +")          # 最后一段去掉 " +"
@@ -124,16 +141,18 @@ def gen_java(digits_hex, colon_hex):
     return JAVA_TEMPLATE.format(
         glyph_w=GLYPH_W, glyph_h=GLYPH_H, colon_w=COLON_W, colon_h=COLON_H,
         digit_consts=digit_consts, colon_const=const("COLON", colon_hex, COLON_W, COLON_H),
+        dot_const=const("DOT", dot_hex, COLON_W, COLON_H),
         digits_array=arr)
 
 
-def gen_py(digits_hex, colon_hex):
+def gen_py(digits_hex, colon_hex, dot_hex):
     def const(name, hexstr, per_line=96):
         parts = chunks(hexstr, per_line)
         return '%s = (\n%s\n)' % (name, "\n".join('    "%s"' % p for p in parts))
 
     lines = [const("D%d" % d, digits_hex[d]) for d in range(10)]
     lines.append(const("COLON", colon_hex))
+    lines.append(const("DOT", dot_hex))
     return PY_TEMPLATE.format(
         glyph_w=GLYPH_W, glyph_h=GLYPH_H, colon_w=COLON_W, colon_h=COLON_H,
         digit_consts="\n\n".join(lines))
@@ -166,6 +185,8 @@ public final class AodFont {{
 
 {colon_const}
 
+{dot_const}
+
     private static final String[] DIGITS = {{
 {digits_array},
     }};
@@ -180,6 +201,11 @@ public final class AodFont {{
     /** 冒号的 alpha 遮罩（COLON_W x COLON_H，0-255）。 */
     public static byte[] colon() {{
         return decodeHex(COLON);
+    }}
+
+    /** 句点的 alpha 遮罩（与冒号同画布，只有一个点，底边压在数字基线上）。 */
+    public static byte[] dot() {{
+        return decodeHex(DOT);
     }}
 
     /**
@@ -266,6 +292,11 @@ def colon():
     return bytes.fromhex(COLON)
 
 
+def dot():
+    """句点的 alpha 遮罩（与冒号同画布，只有一个点，底边压在数字基线上）。"""
+    return bytes.fromhex(DOT)
+
+
 def fit(src, sw, sh, w, h):
     """把 sw x sh 的字模按高度等比缩放并居中到 w x h，返回 w*h 的 alpha。
 
@@ -312,8 +343,9 @@ def main():
 
     digits_hex = [hex_of(render_digit(d)) for d in range(10)]
     colon_hex = hex_of(render_colon())
-    java_src = gen_java(digits_hex, colon_hex)
-    py_src = gen_py(digits_hex, colon_hex)
+    dot_hex = hex_of(render_dot())
+    java_src = gen_java(digits_hex, colon_hex, dot_hex)
+    py_src = gen_py(digits_hex, colon_hex, dot_hex)
 
     if args.check:
         ok = True

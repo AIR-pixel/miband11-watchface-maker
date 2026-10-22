@@ -90,8 +90,8 @@ Three things that matter:
 | Platform | Download | Notes |
 |---|---|---|
 | **Web** | <https://miband-watchface.app.workbuddy.host/> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
-| **Android** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | Install directly. Android 7.0+ (minSdk 24) |
-| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
+| **Android** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | Install directly. Android 7.0+ (minSdk 24) |
+| **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
 
 > Android may warn about "unknown sources" during install; allow it in settings.
 
@@ -423,7 +423,7 @@ Finally click "Generate .face" at the bottom. Output goes to `watchface_out/` ne
 ### Android
 
 **1. Install** — download
-[watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk)
+[watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk)
 (Android 7.0+).
 
 **2. Flow** — likewise two tabs plus a pinned generate button.

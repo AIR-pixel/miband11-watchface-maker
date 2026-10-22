@@ -18,7 +18,7 @@ python tools/diff_face.py --stage asm --keep
 | `lua_cases.txt` | LuaGen 用例，12 例，20 字段 |
 | `aod_cases.txt` | AOD 用例，12 例，13 字段 |
 | `assemble_cases.txt` | 装配用例，21 例，5 字段 |
-| `font_cases.txt` | AOD 字库用例，26 例，5 字段（生产 10×2 + 冒号 2 + 边界 6） |
+| `font_cases.txt` | AOD 字库用例，28 例，5 字段（生产 10×2 + 冒号 2 + 句点 2 + 边界 6） |
 | `jvm/DiffMain.java` | JVM 侧驱动（`lua` / `aod` / `asm` / `font` 四个模式） |
 | `reference.py` | Python 参考侧：用例解析、记录推导、参考 packer |
 
