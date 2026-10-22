@@ -3,7 +3,8 @@
 
 ## 结构
 
-AOD 是主工程的**同级子工程**，不单独编译：
+AOD 是主工程的**同级子工程**，不单独编译（无论是走官方编译器还是本项目的纯代码打包，
+它都随主工程一起进同一个 `.face`）：
 
     工程目录/
       MyFace.fprj + images/ + app/lua/
@@ -130,10 +131,67 @@ def _w_digits(name, x, y, digit_w, digit_h, digits, value_src, bitmap_list):
                value_src, "|".join(bitmap_list)))
 
 
+def widgets_to_xml(widgets):
+    """控件表 → fprj 里的 Widget 片段（与结构化布局一一对应）。"""
+    out = []
+    for w in widgets:
+        if w["kind"] == 30:
+            out.append(_w_image(w["name"], w["img"], w["x"], w["y"], w["w"], w["h"]))
+        else:
+            out.append(_w_digits(w["name"], w["x"], w["y"], w["dw"], w["dh"],
+                                 w["digits"], w["src"], w["list"]))
+    return "".join(out)
+
+
+def needed_images(widgets):
+    """控件表 → {文件名: (宽, 高)}。打包时按它去 images/ 读像素。"""
+    m = {}
+    for w in widgets:
+        if w["kind"] == 30:
+            m[w["img"]] = (w["w"], w["h"])
+        else:
+            for f in w["list"]:
+                m[f] = (w["dw"], w["dh"])
+    return m
+
+
 def generate_aod_fprj(widgets_xml, title="AOD"):
     xml = (_AOD_HEAD.format(device=DEVICE_TYPE, title=title)
            + widgets_xml + _AOD_TAIL)
     return xml.encode("utf-16")
+
+
+def plan_aod_widgets(cfg):
+    """算出 AOD 屏的**控件表**（结构化 dict），不产 XML、不落盘。
+
+    打包器据此推导描述块，`build_aod()` 据此写素材与 fprj —— 两边共用同一份布局，
+    不会出现「fprj 里声明的图没打进包」这类漂移。
+
+    每项：
+        {'kind': 30, 'name','x','y','w','h','img'}
+        {'kind': 32, 'name','x','y','dw','dh','digits','src','list'}
+    """
+    widgets = []
+    bg_mode = cfg.get("bg_mode", "none")
+    has_bg = bg_mode == "black" or bool(
+        bg_mode == "custom" and cfg.get("bg_image") and os.path.isfile(cfg["bg_image"]))
+    if has_bg:
+        widgets.append({"kind": 30, "name": "aod_bg", "x": 0, "y": 0,
+                        "w": SCREEN_W, "h": SCREEN_H, "img": "aod_bg.png"})
+
+    parts, _need = plan_aod_layout(cfg)
+    for kind, payload in parts:
+        if kind == "img":
+            name, fname, x, y, w, h, _group = payload
+            widgets.append({"kind": 30, "name": name, "x": x, "y": y,
+                            "w": w, "h": h, "img": fname})
+        else:
+            name, x, y, dw, dh, digits, src, files, _group = payload
+            # BitmapList 补一张 0 凑成 11 项（官方样本就是 11 张）
+            widgets.append({"kind": 32, "name": name, "x": x, "y": y,
+                            "dw": dw, "dh": dh, "digits": digits, "src": src,
+                            "list": list(files) + [files[0]]})
+    return widgets
 
 
 # --------------------------------------------------------------------------- 组装
@@ -193,7 +251,7 @@ def plan_aod_layout(cfg):
 
 
 def build_aod(workdir, cfg, progress=None):
-    """在工程目录下写出 AOD 子工程。返回实际写入的图片数量。
+    """在工程目录下写出 AOD 子工程（素材 + AOD.fprj）。返回写入的图片数量。
 
     cfg 字段：
         enabled      bool
@@ -203,6 +261,9 @@ def build_aod(workdir, cfg, progress=None):
         time_y       时间行 Y（像素）
         date_y       日期行 Y（像素）
         color        '#RRGGBB' 数字/冒号颜色
+
+    布局全部来自 `plan_aod_widgets()` —— 打包器读的是同一份控件表，
+    所以这里只负责把控件需要的图**画出来存盘**。
     """
     if not cfg.get("enabled"):
         return 0
@@ -213,60 +274,48 @@ def build_aod(workdir, cfg, progress=None):
     os.makedirs(os.path.join(aod_dir, "output"), exist_ok=True)
 
     color = _hex_to_rgba(cfg.get("color", "#FFFFFF"))
-    widgets = []
+    widgets = plan_aod_widgets(cfg)
     n_written = 0
+    digits_done = set()          # 同一 (dw, dh) 的 10 张数字图只画一次
 
-    # ---- 底图 ----
-    bg_mode = cfg.get("bg_mode", "none")
-    if bg_mode == "black":
-        Image.new("RGB", (SCREEN_W, SCREEN_H), (0, 0, 0)).save(
-            os.path.join(img_dir, "aod_bg.png"))
-        widgets.append(_w_image("aod_bg", "aod_bg.png", 0, 0, SCREEN_W, SCREEN_H))
-        n_written += 1
-    elif bg_mode == "custom" and cfg.get("bg_image") and os.path.isfile(cfg["bg_image"]):
-        im = Image.open(cfg["bg_image"]).convert("RGB").resize(
-            (SCREEN_W, SCREEN_H), Image.LANCZOS)
-        im.save(os.path.join(img_dir, "aod_bg.png"))
-        widgets.append(_w_image("aod_bg", "aod_bg.png", 0, 0, SCREEN_W, SCREEN_H))
-        n_written += 1
-
-    # ---- 数字与冒号 ----
-    parts, _need = plan_aod_layout(cfg)
-    made_digits = set()
-    for kind, payload in parts:
-        if kind == "img":
-            name, fname, x, y, w, h, group = payload
-            if group == "time":
-                render_colon_image(AOD_COLON_W, AOD_TIME_DIGIT_H, color).save(
-                    os.path.join(img_dir, fname))
+    for w in widgets:
+        if w["kind"] == 30:
+            if w["img"] == "aod_bg.png":
+                _save_bg(img_dir, cfg)
             else:
-                render_colon_image(AOD_COLON_W, AOD_DATE_DIGIT_H, color).save(
-                    os.path.join(img_dir, fname))
-            widgets.append(_w_image(name, fname, x, y, w, h))
+                render_colon_image(w["w"], w["h"], color).save(os.path.join(img_dir, w["img"]))
             n_written += 1
-        else:
-            name, x, y, dw, dh, digits, src, files, group = payload
-            if group not in made_digits:
-                # 10 张数字图（0..9）落盘；BitmapList 里再补一张 0 凑成 11 项
-                # —— 官方样本就是 11 张，照抄数量规避「某位数字不显示」。
-                imgs = render_digit_images(dw, dh, color)
-                for i, im in enumerate(imgs):
-                    im.save(os.path.join(img_dir, files[i]))
-                made_digits.add(group)
-                n_written += len(imgs)
-            widgets.append(_w_digits(name, x, y, dw, dh, digits, src, files + [files[0]]))
+            continue
+
+        key = (w["dw"], w["dh"])
+        if key not in digits_done:
+            files = w["list"][:-1]           # 末位是补的重复 0，不单独落盘
+            for i, im in enumerate(render_digit_images(w["dw"], w["dh"], color)):
+                im.save(os.path.join(img_dir, files[i]))
+            digits_done.add(key)
+            n_written += len(files)
 
     # 预览图（AOD 屏的 preview 实测不入包，但 fprj 声明了它，写上更安全）
     Image.new("RGB", (SCREEN_W, SCREEN_H), (0, 0, 0)).save(
         os.path.join(img_dir, "preview.png"))
 
-    fprj = generate_aod_fprj("".join(widgets))
+    fprj = generate_aod_fprj(widgets_to_xml(widgets))
     with open(os.path.join(aod_dir, "AOD.fprj"), "wb") as f:
         f.write(fprj)
 
     if progress:
         progress(f"AOD 子工程已写入（{n_written} 张素材）")
     return n_written
+
+
+def _save_bg(img_dir, cfg):
+    """AOD 底图：纯黑 or 自定义图（缩到整屏）。"""
+    path = os.path.join(img_dir, "aod_bg.png")
+    if cfg.get("bg_mode") == "custom" and cfg.get("bg_image"):
+        Image.open(cfg["bg_image"]).convert("RGB").resize(
+            (SCREEN_W, SCREEN_H), Image.LANCZOS).save(path)
+    else:
+        Image.new("RGB", (SCREEN_W, SCREEN_H), (0, 0, 0)).save(path)
 
 
 def _hex_to_rgba(s):

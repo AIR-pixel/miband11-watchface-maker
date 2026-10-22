@@ -7,12 +7,13 @@
 
 所有多字节整数均为**小端序（little-endian）**。
 
-> 参考实现（两份逐字节等价的独立实现）：
+> 参考实现（两份逐字节等价的独立实现，也是**现在实际在跑的**生产代码）：
 >
-> - Python：`watchface-tool/watchface_tool/face_builder.py`
-> - Java：`watchface-android/core/face/FaceBuilder.java`
+> - Python：`watchface-tool/watchface_tool/facebin.py`（Windows 版）
+> - Java：`watchface-android/core/face/FaceBuilder.java`（安卓版）
 >
-> 想验证一份 `.face` 是否符合本规范，直接跑 `tools/verify_face.py`。
+> 想验证一份 `.face` 是否符合本规范，直接跑 `tools/verify_face.py`；
+> 想把一份现成 `.face` 拆开再拼回去对拍，跑 `tools/roundtrip_face.py`。
 
 ---
 
@@ -333,19 +334,22 @@ def build_face(title, face_id, files, preview_rgba, w=212, h=520):
 
 ---
 
-## 9. `.fprj`（项目文件，与 `.face` 无关但同属构建输入）
+## 9. `.fprj`（项目文件）
 
-如果走官方 `Compiler.exe` 路线，还需要一个 `.fprj` 项目文件：
+`.fprj` 是官方工具链（Vela IDE / `Compiler.exe`）的项目描述文件：
 
 - 编码：**UTF-16 LE + BOM（`FF FE`）**
 - 换行：**LF**
 - 关键属性：`DeviceType="466"`、`Shape="34"`（Lua 表盘）
 
-见 `watchface-tool/watchface_tool/fprj.py`。
+**本项目的打包链路已经不用它了** —— 纯代码打包只吃 `app/lua/` 里的帧与 `main.lua`，
+主工程的 `.fprj` 既不生成也不解析。唯一还在写的是 AOD 子工程的 `AOD/AOD.fprj`，
+因为它是控件表的落盘形式（`aod.plan_aod_widgets()` → `widgets_to_xml()`），
+打包器与它共用同一份布局。
 
 ---
 
-## 10. 构建管线（走官方编译器时）
+## 10. 官方构建管线（仅作对照，本项目不再使用）
 
 ```
 .fprj + app/lua/*.png|jpg + main.lua
@@ -360,8 +364,9 @@ Compiler.exe -b <fprj> <outDir> <name.face> <faceId>
 `Compiler.exe` 只会把 `.info` 写到 `<fprj 同级目录>/output/`，
 **这个目录必须预先存在**，否则会静默失败。
 
-注意 `Compiler.exe` 是 **x86 Windows 二进制**，安卓上跑不了 ——
-这正是本项目安卓版采用纯代码拼装（第 8 节）的原因。
+注意 `Compiler.exe` 是 **x86 Windows 二进制**，安卓上跑不了。
+本项目两端都改成纯代码拼装（第 8 节），产物与它**逐字节一致**
+（`tools/roundtrip_face.py`：往返回归；PC 链路另做过同参数产物直接 `cmp` 对拍）。
 
 ---
 
@@ -378,6 +383,11 @@ AOD/
 
 `Compiler.exe` 内建这条路径（字符串表里有 `\AOD`、`\AOD\images`、`AOD face file is not found`），
 不是第三方工具的约定。
+
+> 这套目录结构沿用下来了，但纯代码打包时**不再交给编译器去发现**：
+> `aod.plan_aod_widgets()` 直接给出控件表，`facebin.aod_records()` 按它推导描述块，
+> 素材按 `needed_images()` 去 `AOD/images/` 取。`AOD.fprj` 仍会写出来，
+> 是布局的落盘形式与人工排查的凭据。
 
 ### 11.1 AOD 屏**不支持 Lua**（实测）
 

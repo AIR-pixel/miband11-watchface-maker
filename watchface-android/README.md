@@ -29,12 +29,13 @@
 |---|---|---|---|
 | `main.lua` 生成 | `core/face/LuaGen.java` | `watchface_tool/lua.py` | 12 |
 | AOD 布局 + 描述块 | `core/face/AodGen.java` | `watchface_tool/aod.py` ＋ `tools/diff/reference.py` | 12 |
-| `.face` 拼装 | `core/face/FaceBuilder.java` | `tools/diff/reference.py` | 21 |
+| `.face` 拼装 | `core/face/FaceBuilder.java` | `watchface_tool/facebin.py` | 21 |
 
-> Windows 端打包仍然走官方 `Compiler.exe`（见 [`build.py`](../watchface-tool/watchface_tool/build.py)），
-> 所以 Python 侧没有生产用的 packer，`tools/diff/reference.py` 是**专为差分而写的参考实现**。
-> 早先文档里说 `watchface_tool/face_builder.py` 是 Java 版的对拍对象 ——
-> 那个文件是 v1.x 留下的原形（**没有 AOD、没有任何调用方**），不是对拍对象。
+> 两端都有**生产用**的纯代码打包器（Java / Python），不依赖任何官方二进制。
+> 差分回归里 Python 侧那一栏仍写 `tools/diff/reference.py`：那是**照格式规范独立重写**的
+> 第三份实现，专门用来对拍 —— 用它而不是直接拿生产代码去比，是为了避免
+> 「一次重构把两侧同时改错」这种同源错误。生产打包器另有
+> [`tools/roundtrip_face.py`](../tools/roundtrip_face.py) 与官方编译器产物逐字节对拍。
 
 **与官方 `Compiler.exe` 的一致性**（当时逐字节对拍的结果）：
 

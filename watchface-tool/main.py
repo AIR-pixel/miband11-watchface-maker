@@ -4,7 +4,7 @@
 默认启动 GUI；也支持命令行无界面生成（便于脚本化 / 测试）：
 
     python main.py --cli --src in.gif --level balanced --fps 16 \
-        --name MyFace --compiler path/to/Compiler.exe [--crop x0,y0,x1,y1]
+        --name MyFace [--crop x0,y0,x1,y1]
 """
 import argparse
 import sys
@@ -33,7 +33,6 @@ def _cli(argv):
     p.add_argument("--crop", default=None, help="裁剪框 x0,y0,x1,y1；省略则默认居中")
     p.add_argument("--name", default="MyWatchface")
     p.add_argument("--id", default=None, help="表盘 ID（数字，省略自动生成）")
-    p.add_argument("--compiler", required=True, help="Compiler.exe 路径")
     p.add_argument("--out", default=None, help="输出目录")
     p.add_argument("--no-time", action="store_true", help="不叠加时间")
     # ---- 功能自定义 ----
@@ -79,7 +78,6 @@ def _cli(argv):
         target_fps=args.fps,
         face_name=args.name,
         face_id=args.id,
-        compiler_exe=args.compiler,
         show_time=not args.no_time,
         show_date=args.date,
         time_align=args.time_pos,

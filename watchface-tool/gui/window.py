@@ -11,7 +11,6 @@
   参数区顶到窗口外，而且切页后按钮跟着消失。
 - 页面 2 内容比页面 1 长得多，装进 ScrollFrame，避免在高 DPI 小屏上被切掉。
 """
-import json
 import os
 import queue
 import sys
@@ -35,13 +34,6 @@ from watchface_tool.constants import (
 from .crop_canvas import CropCanvas
 from .scroll_frame import ScrollFrame
 
-CONFIG_PATH = os.path.expanduser("~/.watchface_tool.json")
-
-_COMPILER_CANDIDATES = [
-    os.path.join(os.path.dirname(__file__), "..", "assets", "Compiler.exe"),
-    os.path.join(os.path.dirname(__file__), "..", "Compiler.exe"),
-]
-
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     _HAS_DND = True
@@ -54,26 +46,6 @@ try:                                   # Pillow >= 9.1
     _LANCZOS = Image.Resampling.LANCZOS
 except AttributeError:                 # 老版本兜底
     _LANCZOS = Image.LANCZOS
-
-
-# ---------------------------------------------------------------------- 配置
-
-def _load_config():
-    if os.path.isfile(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:                            # noqa: BLE001
-            pass
-    return {}
-
-
-def _save_config(cfg):
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception:                                # noqa: BLE001
-        pass
 
 
 # ---------------------------------------------------------------------- 高 DPI
@@ -106,14 +78,6 @@ def _apply_scaling(root, dpi):
         pass
 
 
-def _short(path, limit=48):
-    if not path or len(path) <= limit:
-        return path
-    head = path[: max(8, limit // 3)]
-    tail = path[-(limit - len(head) - 1):]
-    return f"{head}…{tail}"
-
-
 def _hex_to_int(s):
     try:
         return int((s or "#FFFFFF").lstrip("#"), 16)
@@ -140,15 +104,11 @@ class MainWindow:
         self._queue = queue.Queue()
         self._pump_job = None
 
-        cfg = _load_config()
-        self._compiler = cfg.get("compiler") or self._find_compiler()
-
         root.title("手环 11 动态表盘制作工具")
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
 
         self._build_ui()
-        self._apply_compiler_state()
         self._on_fmt_changed()
         self._fit_window()
         self._setup_dnd()
@@ -375,21 +335,6 @@ class MainWindow:
                             pady=(int(6 * self.dpr), 0))
         r += 1
 
-        # ---- 3. Compiler.exe ----
-        g = ttk.LabelFrame(right, text="3. Compiler.exe（自备，见 README）",
-                           padding=int(6 * self.dpr))
-        g.grid(row=row, column=0, sticky="ew", pady=(int(8 * self.dpr), 0))
-        g.columnconfigure(0, weight=1)
-        row += 1
-        crow = ttk.Frame(g)
-        crow.grid(row=0, column=0, sticky="ew")
-        crow.columnconfigure(0, weight=1)
-        self.comp_var = tk.StringVar(value=self._compiler or "")
-        ttk.Entry(crow, textvariable=self.comp_var).grid(row=0, column=0, sticky="ew",
-                                                         padx=(0, int(4 * self.dpr)))
-        ttk.Button(crow, text="浏览", width=6, command=self._pick_compiler).grid(row=0, column=1)
-        self.comp_status = ttk.Label(g, text="", justify="left", wraplength=self._wrap())
-        self.comp_status.grid(row=1, column=0, sticky="w", pady=(int(4 * self.dpr), 0))
 
     # ------------------------------------------------------------ 页面 2
 
@@ -919,34 +864,6 @@ class MainWindow:
             self.aod_bg_combo.current(idx)
             self._on_aod_changed()
 
-    # ------------------------------------------------------------------ Compiler
-
-    def _find_compiler(self):
-        for c in _COMPILER_CANDIDATES:
-            c = os.path.normpath(os.path.abspath(c))
-            if os.path.isfile(c):
-                return c
-        return None
-
-    def _pick_compiler(self):
-        path = filedialog.askopenfilename(
-            title="选择 Compiler.exe", parent=self.root,
-            filetypes=[("Compiler.exe", "*.exe"), ("所有文件", "*.*")])
-        if path:
-            self._compiler = path
-            self.comp_var.set(path)
-            self._apply_compiler_state()
-
-    def _apply_compiler_state(self):
-        comp = self.comp_var.get().strip()
-        if comp and os.path.isfile(comp):
-            self._compiler = comp
-            self.comp_status.config(text=f"已就绪：{_short(comp, 34)}", foreground="#008000")
-        else:
-            self.comp_status.config(
-                text="未找到 Compiler.exe。请从 EasyFace 工具目录复制 Compiler.exe 并在上方指定路径。",
-                foreground="#c00000")
-
     # ------------------------------------------------------------------ 窗口尺寸
 
     def _fit_window(self):
@@ -992,12 +909,6 @@ class MainWindow:
             messagebox.showinfo("提示", "请先选择或拖入素材。", parent=self.root)
             self.nb.select(0)
             return
-        comp = self.comp_var.get().strip()
-        if not (comp and os.path.isfile(comp)):
-            messagebox.showwarning("缺少 Compiler.exe",
-                                   "请先在页面 1 下方指定 Compiler.exe 路径。", parent=self.root)
-            self.nb.select(0)
-            return
         name = self.name_var.get().strip() or "MyWatchface"
         face_id = self.id_var.get().strip() or self._gen_id()
         if not face_id.isdigit():
@@ -1019,7 +930,6 @@ class MainWindow:
             target_fps=self._fps_value(),
             face_name=name,
             face_id=face_id,
-            compiler_exe=comp,
             show_time=self.show_time.get(),
             show_date=self.show_date.get(),
             time_align=self.time_align.get(),
@@ -1043,10 +953,6 @@ class MainWindow:
             speedup=self.speedup_var.get(),
             jpg_quality=self._jpg_quality(),
         )
-
-        cfg = _load_config()
-        cfg["compiler"] = comp
-        _save_config(cfg)
 
         self._building = True
         self.build_btn.config(state="disabled")

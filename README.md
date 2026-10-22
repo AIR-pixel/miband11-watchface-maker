@@ -30,8 +30,9 @@
 | **产物** | `.face`（可安装表盘） |
 | **输入** | 视频（mp4/mov/mkv/webm/avi）· GIF · 静态图（png/jpg/bmp/webp） |
 | **两条实现** | Windows（Python + tkinter）· 安卓（Kotlin 界面 + Java 核心） |
-| **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频）· `Compiler.exe`（自备） |
-| **安卓端依赖** | 无 —— 纯代码拼装 `.face`，**不需要 `Compiler.exe`** |
+| **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频） |
+| **安卓端依赖** | 无 |
+| **官方工具** | 两端都**不需要**装 Vela IDE，也不需要任何官方二进制 —— 纯代码拼装 `.face` |
 | **体积预算** | 经验值 ≤ 3.5 MB，改参数时实时预估 |
 
 ---
@@ -59,7 +60,7 @@
 ## 它解决什么问题
 
 小米手环 11 的**动态表盘必须走 Vela Lua（Lua + LVGL）**才能做，官方「相册表盘」只能放静态图。
-而官方链路要求装 Vela IDE、手写 Lua、调 LVGL、再跑 `Compiler.exe` 打包 —— 门槛不低。
+而官方链路要求装 Vela IDE、手写 Lua、调 LVGL、再跑官方编译器打包 —— 门槛不低。
 
 这个项目把整条链路收成一个界面操作：
 
@@ -72,8 +73,9 @@
 1. **框选裁剪** —— 任意素材自动吸附到 212:520，无黑边。
 2. **体积可控** —— 表盘有体积预算（经验值 ≤ 3.5 MB），这个工具能精确控制到每一档，
    并且**改参数时实时显示预估体积**，不用反复试。
-3. **安卓版不依赖 Compiler.exe** —— 官方编译器是 x86 Windows 二进制，安卓跑不了。
-   安卓版用**纯代码按二进制格式直接拼装** `.face`，摆脱了这个依赖。
+3. **两端都不依赖官方编译器** —— 官方编译器是 x86 Windows 二进制，安卓本来就跑不了。
+   本项目两端都**按二进制格式纯代码拼装** `.face`（Python 与 Java 各一份实现），
+   产物与编译器输出**逐字节一致**，所以它生成的就是真表盘，不是「半成品工程文件」。
 
 ---
 
@@ -82,7 +84,7 @@
 | 平台 | 下载 | 说明 |
 |---|---|---|
 | **安卓** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | 直接安装。Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | 源码包，需自行装 Python 依赖 + 自备 `Compiler.exe` |
+| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
 
 > 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。
 
@@ -339,7 +341,7 @@ pip install -r watchface-tool/requirements.txt   # Pillow + tkinterdnd2
 ```
 
 - 处理**视频**需要 `ffmpeg`（GIF / 图片不需要），装好后加入 PATH。
-- 打包 `.face` 需要 **`Compiler.exe`**，本项目不分发，需自备（见 [NOTICE](./NOTICE)）。
+- 打包环节是纯 Python，**不需要任何官方工具**。
 
 **2. 启动**
 
@@ -354,14 +356,13 @@ python main.py
 
 | 页签 | 内容 |
 |---|---|
-| **① 动态壁纸** | 1. 素材 · 2. 参数 · 3. Compiler.exe |
+| **① 动态壁纸** | 1. 素材 · 2. 参数 |
 | **② 功能自定义** | A. 息屏显示（AOD）· B. 壁纸（多张）· C. 主屏显示元素 · D. 点击交互 |
 | **底部（固定贴底）** | 生成按钮 · 进度条 · 状态行 |
 
 **页签 ①**：拖入素材（或点「选择素材」）→ 左侧**框选裁剪区域**（拖动移动、拖角点缩放、滚轮缩放）
 → 右侧调压缩程度 / 编码格式 / JPEG 质量 / 帧率 / 截取区间 / 帧数上限 / 快放开关
-→ 看「预估」行确认体积（超预算标红）
-→ 在「3. Compiler.exe」处指定路径（会记住，存到 `~/.watchface_tool.json`）。
+→ 看「预估」行确认体积（超预算标红）→ 点底部「生成 .face」。
 
 **页签 ②** 四组（全部可选，不做就是纯动态壁纸）：
 **A. 息屏显示（AOD）** —— 开关、底图（无 / 纯黑 / 自定义图片）、内容（不显示 / 时间 / 时间+日期）、
@@ -391,7 +392,7 @@ python main.py
 > 裁剪预览与 AOD 预览用「基准高 + 权重」吃掉富余高度：放得下时参数按自然高度铺开，
 > 放不下时预览退到基准高、整页滚动。
 >
-> 安卓版**不需要 `Compiler.exe`**，它用纯代码拼装 `.face`。
+> 安卓版与 Windows 版都不用官方编译器，各有一份纯代码打包实现（Java / Python）。
 
 **3. 从源码自行构建**（不需要 Android Studio，不需要 Gradle）
 
@@ -438,7 +439,7 @@ python main.py --cli \
   --src 素材.gif --level tiny --fps 12 --max-frames 96 \
   --fmt jpg --jpg-quality 80 \
   --clip-start 0 --clip-dur 4 \
-  --name MyFace --compiler "path/to/Compiler.exe"
+  --name MyFace
 ```
 
 <details>
@@ -458,7 +459,6 @@ python main.py --cli \
 | `--speedup` | 保持帧率、压缩时长（快放）；默认是保时长、降帧率 |
 | `--crop` | 裁剪框 `x0,y0,x1,y1`；省略则默认居中 |
 | `--name` / `--id` | 表盘名称 / ID |
-| `--compiler` | `Compiler.exe` 路径（必填） |
 | `--out` | 输出目录 |
 | `--no-time` | 不叠加时间 |
 
@@ -491,7 +491,7 @@ python main.py --cli \
   --level tiny --fps 8 --max-frames 48 \
   --date --date-fmt "%Y/%m/%d" --tap cycle \
   --aod --aod-content both \
-  --name MyFace --compiler "path/to/Compiler.exe"
+  --name MyFace
 ```
 
 ---
@@ -542,8 +542,22 @@ python main.py --cli \
 偏移量相对 / 绝对搞混、某个分支从没被执行过、一行 `append` 缩进错级多出假控件）
 **全都**发生在「关键字段看着都对」的地方。详见 [docs/项目经验.md](./docs/项目经验.md) 的 Bug 4/5/6。
 
-⚠️ 覆盖不到的是**与官方 `Compiler.exe` 的一致性**：那需要本体，本项目因授权不分发，
-所以那条证据是实测记录、不是可重跑脚本。
+### 与官方编译器的一致性（可重跑）
+
+上面的差分证明「两份实现互相同意」，还要证明「它们与官方编译器也同意」。这条也有脚本：
+
+```bash
+python tools/roundtrip_face.py 样本1.face 样本2.face ...
+```
+
+它把一份现成 `.face` **拆回打包器的输入再拼回去**，要求结果与原件**逐字节相同**。
+拿官方编译器产出的 5 份样本（单壁纸 / AOD 时间 / AOD 时间+日期 / 三壁纸 / JPEG 帧）
+跑，结果是 `5/5 逐字节一致`。
+
+比往返回归更直接的一条证据也在本地做过：同一组参数分别用「官方编译器」和
+「纯代码打包」各跑一遍，两个 `.face` 直接 `cmp` —— 5 份全部零差异。
+这一步需要编译器本体（不在仓库里、也不再是运行依赖），所以只作为一次性实测记录，
+可重跑的部分就是 `tools/roundtrip_face.py`。
 
 ---
 
@@ -602,9 +616,8 @@ python main.py --cli \
    角色形象等受版权保护的素材制作表盘，更不要公开分发这类产物 ——
    把动漫、影视、游戏角色做成表盘分享，很多情况下**属于侵权**。
 
-5. **第三方组件。** 本项目依赖 `Compiler.exe`（未随仓库分发，需自备）等组件，
-   授权状况见 [NOTICE](./NOTICE)。`Compiler.exe` 的来源仓库无开源协议，且本质是从官方 IDE
-   提取的产物，**公开分发包含它的打包产物前，应自行评估法律风险**。
+5. **第三方组件。** 本项目不依赖、也不分发任何官方工具二进制（早期版本依赖表盘编译器，
+   现已由纯代码打包取代）。运行时依赖 Pillow / tkinter / ffmpeg 等，授权状况见 [NOTICE](./NOTICE)。
 
 6. **无担保。** 本软件按"原样"提供，不附带任何明示或暗示的担保，包括但不限于 merchantability
    或 fitness for a particular purpose 的担保。详见 [LICENSE](./LICENSE)。
@@ -624,8 +637,8 @@ python main.py --cli \
 
 第三方组件、参考来源、商标归属见 [NOTICE](./NOTICE)。
 
-> 注意：MIT 只覆盖本仓库中包含的源码。`Compiler.exe` 不在其中（也未随仓库分发），
-> 它的授权状况不受本项目影响。
+> 注意：MIT 只覆盖本仓库中包含的源码。第三方运行时依赖（Pillow、ffmpeg 等）
+> 与商标归属不受本项目影响，见 [NOTICE](./NOTICE)。
 
 ---
 
@@ -669,8 +682,8 @@ miband11-watchface-maker/
 │       ├── aod.py              生成 AOD 息屏子工程（数字位图 + 数据源绑定）
 │       ├── aod_font.py         AOD 内嵌字库（由 tools/gen_aod_font.py 生成）
 │       ├── fprj.py             生成 .fprj（UTF-16 XML）
-│       ├── face_builder.py     纯代码拼装 .face（不依赖 Compiler.exe）
-│       ├── build.py            调用 Compiler.exe + 回写表盘 ID
+│       ├── facebin.py          .face 打包/解包核心（纯代码，零第三方依赖）
+│       ├── build.py            收集工程文件 → 打包 → 落盘
 │       └── pipeline.py         编排
 └── watchface-android/          安卓版（Kotlin 界面 + Java 核心）
     ├── build.sh                无 Gradle 构建脚本（javac + kotlinc + R8）

@@ -33,8 +33,9 @@ algorithms and producing the same output format.
 | **Output** | `.face` (installable watch face) |
 | **Input** | Video (mp4/mov/mkv/webm/avi) · GIF · still images (png/jpg/bmp/webp) |
 | **Two implementations** | Windows (Python + tkinter) · Android (Kotlin UI + Java core) |
-| **Windows requirements** | Python 3.8+ · Pillow · `ffmpeg` (video only) · `Compiler.exe` (bring your own) |
-| **Android requirements** | None — the `.face` is assembled in pure code, **no `Compiler.exe` needed** |
+| **Windows requirements** | Python 3.8+ · Pillow · `ffmpeg` (video only) |
+| **Android requirements** | None |
+| **Official tooling** | **Not required on either platform** — no Vela IDE, no official binaries; `.face` is assembled in pure code |
 | **Size budget** | Rule of thumb ≤ 3.5 MB, estimated live as you change parameters |
 
 ---
@@ -63,7 +64,7 @@ algorithms and producing the same output format.
 
 Animated watch faces on the Band 11 **require Vela Lua (Lua + LVGL)** — the official
 "photo watch face" only accepts still images. And the official toolchain means installing
-Vela IDE, hand-writing Lua, tuning LVGL, then running `Compiler.exe` to package. Not a low bar.
+Vela IDE, hand-writing Lua, tuning LVGL, then running the official compiler to package. Not a low bar.
 
 This project collapses that pipeline into a single UI flow:
 
@@ -77,7 +78,7 @@ Three things that matter:
 2. **Size is controllable** — watch faces have a size budget (rule of thumb ≤ 3.5 MB).
    This tool lets you dial it in per setting, and shows a **live size estimate** as you
    change parameters instead of making you guess-and-rebuild.
-3. **The Android build does not need `Compiler.exe`** — the official compiler is an
+3. **Neither build needs the official compiler** — it is an
    x86 Windows binary that cannot run on Android. The Android version **assembles the
    `.face` byte by byte in pure code**, removing that dependency entirely.
 
@@ -88,7 +89,7 @@ Three things that matter:
 | Platform | Download | Notes |
 |---|---|---|
 | **Android** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | Install directly. Android 7.0+ (minSdk 24) |
-| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | Source package — install Python deps yourself and bring your own `Compiler.exe` |
+| **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
 
 > Android may warn about "unknown sources" during install; allow it in settings.
 
@@ -369,7 +370,7 @@ pip install -r watchface-tool/requirements.txt   # Pillow + tkinterdnd2
 ```
 
 - Processing **video** requires `ffmpeg` (GIF / images do not); add it to PATH.
-- Packaging `.face` requires **`Compiler.exe`**, which this project does not distribute —
+- Packaging is pure Python — **no official tooling needed**.
   bring your own (see [NOTICE](./NOTICE)).
 
 **2. Launch**
@@ -385,14 +386,14 @@ The UI has **two tabs**, with "Generate .face" pinned at the bottom:
 
 | Tab | Contents |
 |---|---|
-| **① Animated wallpaper** | 1. Source · 2. Parameters · 3. Compiler.exe |
+| **① Animated wallpaper** | 1. Source · 2. Parameters |
 | **② Features** | A. AOD · B. Wallpapers (multiple) · C. Home-screen elements · D. Tap actions |
 | **Bottom (pinned)** | Generate button · progress bar · status line |
 
 **Tab ①**: drag in a source (or click "Select source") → **select the crop region** on the left
 (drag to move, drag corners to resize, scroll to zoom) → tune compression, encoding, JPEG quality,
 fps, trim range, frame cap and speed-up on the right → check the estimate line (turns red over
-budget) → set the `Compiler.exe` path under "3. Compiler.exe" (remembered in `~/.watchface_tool.json`).
+budget) → hit **Generate .face** at the bottom.
 
 **Tab ②**, four groups (all optional — skip them for a plain animated wallpaper):
 **A. Always-on display** — toggle, backdrop (none / pure black / custom image), content
@@ -426,7 +427,7 @@ Output goes to `Android/data/face.tool/files/faces/`.
 > "baseline height + weight": when there is room, parameters lay out at natural height with no gaps;
 > when there isn't, the preview falls back to its baseline height and the page scrolls.
 >
-> The Android build **does not need `Compiler.exe`** — it assembles the `.face` in pure code.
+> Neither build needs the official compiler; each has its own pure-code packer (Java / Python).
 
 **3. Building from source** (no Android Studio, no Gradle)
 
@@ -478,7 +479,7 @@ python main.py --cli \
   --src clip.gif --level tiny --fps 12 --max-frames 96 \
   --fmt jpg --jpg-quality 80 \
   --clip-start 0 --clip-dur 4 \
-  --name MyFace --compiler "path/to/Compiler.exe"
+  --name MyFace
 ```
 
 <details>
@@ -498,7 +499,6 @@ python main.py --cli \
 | `--speedup` | Keep fps, compress duration; default is keep duration and drop fps |
 | `--crop` | Crop box `x0,y0,x1,y1`; omit for centered default |
 | `--name` / `--id` | Face name / ID |
-| `--compiler` | Path to `Compiler.exe` (required) |
 | `--out` | Output directory |
 | `--no-time` | Do not overlay the time |
 
@@ -531,7 +531,7 @@ python main.py --cli \
   --level tiny --fps 8 --max-frames 48 \
   --date --date-fmt "%Y/%m/%d" --tap cycle \
   --aod --aod-content both \
-  --name MyFace --compiler "path/to/Compiler.exe"
+  --name MyFace
 ```
 
 ---
@@ -588,9 +588,23 @@ never been executed, and an `append` indented one level too far emitting a phant
 **all** lived in places where the key fields looked perfectly fine.
 See bugs 4/5/6 in [`docs/项目经验.md`](./docs/%E9%A1%B9%E7%9B%AE%E7%BB%8F%E9%AA%8C.md).
 
-⚠️ What it cannot cover is **parity with the official `Compiler.exe`**: that needs the binary
-itself, which this project does not distribute for licensing reasons. That evidence is a record of
-measurements, not a re-runnable script.
+### Parity with the official compiler (re-runnable)
+
+The diff above proves the two implementations agree with *each other*. Proving they agree with the
+official compiler is also scripted:
+
+```bash
+python tools/roundtrip_face.py sample1.face sample2.face ...
+```
+
+It unpacks an existing `.face` back into packer inputs and repacks it, requiring a **byte-for-byte**
+match with the original. Against 5 samples produced by the official compiler (single wallpaper /
+AOD time / AOD time+date / three wallpapers / JPEG frames) the result is `5/5 identical`.
+
+A more direct check was also run locally: the same parameters through "official compiler" and
+"pure-code packer", then `cmp` on the two `.face` files — all 5 were zero-diff. That step needs the
+compiler binary (not in the repo, and no longer a runtime dependency), so it stays a one-off
+measurement; the re-runnable part is `tools/roundtrip_face.py`.
 
 ---
 
@@ -660,11 +674,9 @@ Pitfalls, technical findings and methodology from development are collected in
    without authorization, and do not publicly distribute such output. Turning anime, film, TV or
    game assets into a shared watch face **constitutes infringement** in many cases.
 
-5. **Third-party components.** This project depends on third-party components such as
-   `Compiler.exe` (not distributed here; bring your own); see [NOTICE](./NOTICE). Regarding
-   `Compiler.exe`: its source repository has no open-source license, and it is essentially an
-   artifact extracted from the official IDE — **assess the legal risk yourself before publicly
-   distributing anything that bundles it.**
+5. **Third-party components.** This project neither depends on nor distributes any official
+   tooling binary (early versions required the official compiler; pure-code packing replaced it).
+   Runtime dependencies are Pillow / tkinter / ffmpeg and friends — see [NOTICE](./NOTICE).
 
 6. **No warranty.** This software is provided "as is", without warranty of any kind, express or
    implied, including but not limited to warranties of merchantability or fitness for a particular
@@ -688,8 +700,8 @@ The project's own source code is released under the **MIT License** — see [LIC
 
 Third-party components, references, and trademark attributions are in [NOTICE](./NOTICE).
 
-> Note: MIT covers only the source contained in this repository. `Compiler.exe` is not part of it
-> (and is not distributed here); its licensing is unaffected by this project.
+> Note: MIT covers only the source contained in this repository. Third-party runtime dependencies
+> (Pillow, ffmpeg, ...) and trademark ownership are unaffected by this project — see [NOTICE](./NOTICE).
 
 ---
 
@@ -732,9 +744,8 @@ miband11-watchface-maker/
 │       ├── lua.py             Generates main.lua (animation + time/date + taps + battery hooks)
 │       ├── aod.py             Generates the AOD sub-project (digit bitmaps + source binding)
 │       ├── aod_font.py        Embedded AOD font (generated by tools/gen_aod_font.py)
-│       ├── fprj.py            Generates .fprj (UTF-16 XML)
-│       ├── face_builder.py    Assembles .face in pure code (no Compiler.exe)
-│       ├── build.py           Invokes Compiler.exe + writes back the face ID
+│       ├── facebin.py         .face pack/unpack core (pure code, no third-party deps)
+│       ├── build.py           Collect project files → pack → write out
 │       └── pipeline.py        Orchestration
 └── watchface-android/         Android build (Kotlin UI + Java core)
     ├── build.sh               Gradle-free build script (javac + kotlinc + R8)

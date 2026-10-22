@@ -25,9 +25,9 @@ watchface-android/debug.keystore
 watchface-android/*.apk
 watchface-android/*.apk.idsig
 
-# ---------------------------------------------------------------- Compiler.exe
-# 来源不明（无开源协议，见 NOTICE），本项目不分发。
-# 自备路径写在本机 ~/.watchface_tool.json 或 GUI 里，不进仓库。
+# ---------------------------------------------------------------- 官方工具二进制
+# 本项目已改成纯代码打包，不再需要、也不分发任何官方工具二进制。
+# 这条留着是防手滑：本地若还留有旧版编译器，别把它提交上来。
 Compiler.exe
 assets/Compiler.exe
 watchface-tool/Compiler.exe

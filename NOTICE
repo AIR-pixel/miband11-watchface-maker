@@ -3,39 +3,41 @@
 本仓库（miband11-watchface-maker）的**自有源码**以 MIT 协议发布（见 [LICENSE](./LICENSE)）。
 以下是涉及的第三方组件、来源与边界说明。
 
----
-
-## 1. Compiler.exe —— 未随仓库分发，需自备
-
-Windows 版的打包环节会调用 `Compiler.exe`（小米 Vela IDE 里的表盘编译器）。
-
-- 本项目**不打包、不分发**该文件，仓库里也没有它。
-- 用户需要自行准备：从 [m0tral/EasyFace](https://github.com/m0tral/EasyFace) 的工具目录，
-  或你自己的 Vela 开发环境里复制出来，然后在界面上指定路径。
-- 关于 EasyFace：该仓库**没有 LICENSE 文件**，README 也无授权条款，
-  且其本身是从小米官方 Vela IDE 中提取/修改的产物 —— 属**默认保留所有权利**。
-  本项目只要求用户自备，不参与其再分发。
-- **安卓版不依赖 Compiler.exe 运行**。它用纯 Java 按格式拼装 `.face`
-  （`watchface-android/core/face/FaceBuilder.java`），这条路线没有这个依赖。
-
-> 如果你打算把本项目打包成二进制并公开分发，请自行评估 Compiler.exe 的再分发合法性。
+> **本项目不分发、也不依赖任何小米官方工具二进制。** 两端都用纯代码拼装 `.face`
+> （Python 见 `watchface-tool/watchface_tool/facebin.py`，Java 见
+> `watchface-android/core/face/FaceBuilder.java`），产物与官方编译器的输出逐字节一致
+> （验证方法见 README「怎么证明它是对的」）。
 
 ---
 
-## 2. `.face` 二进制格式 —— 逆向所得的事实性知识
+## 1. `.face` 二进制格式 —— 逆向所得的事实性知识
 
-`docs/face格式规范.md` 里记录的布局、偏移量、字段含义，是通过**对比 Compiler.exe
-的输入输出、逐字节分析其产物**得出的**事实性格式定义**（类似文件格式规范）。
+`docs/face格式规范.md` 里记录的布局、偏移量、字段含义，是通过**对比官方编译器的
+输入输出、逐字节分析其产物**得出的**事实性格式定义**（类似文件格式规范）。
 
 - 这类"格式长什么样"的知识本身不构成对代码的复制。
 - 本仓库未包含、也未分发任何小米官方固件、官方表盘素材或官方工具二进制。
+- 格式规范开头的「通过对比编译器产物得出、换版本不保证成立」是**适用范围声明**，
+  描述的是这份文档的证据来源与失效条件，不是致谢。
+
+## 2. `Value_Src` 数据源 ID 表 — 借用自 Mi-Create
+
+`watchface-tool/watchface_tool/constants.py` 的 `DATA_SOURCES`
+（`hour=0811` / `minute=1011` / `month=1012` / `day=1812`）与
+`watchface-android/core/face/AodGen.java` 里的同名常量，
+取自 [Mi-Create](https://github.com/thiraphat-ps-dev/Mi-Create) 的 `sources.json`。
+
+- 这是**事实性枚举数据**（设备侧 dataman 的数据源编号），不是可创造性表达；
+  但仍在此标明出处。
+- 本仓库未复制该项目的任何源码文件。
 
 ## 3. 构建管线思路 —— 参考 Apache-2.0 模板
 
 - 参考模板：[Zaona/simple-weather-watchface](https://github.com/Zaona/simple-weather-watchface)
   （Apache License 2.0）。
-- 本项目借鉴了其**命令行构建思路**（`Compiler.exe -b <fprj> <out> <name> <id>`）、
+- 本项目早期借鉴了其**命令行构建思路**（`Compiler.exe -b <fprj> <out> <name> <id>`）、
   `.fprj` 的 XML 结构、以及 `.face` 头部表盘 ID 的回写位置（偏移 40）等**功能性事实**。
+  这条链路现在已被纯代码打包取代，只作为历史与格式细节的对照留在文档里。
 - 这些属于实现思路与格式定义。本仓库**未复制其任何源码文件**；为表感谢与透明，在此署名。
 
 ## 4. 生成的 Lua 代码
@@ -70,7 +72,7 @@ Windows 版的打包环节会调用 `Compiler.exe`（小米 Vela IDE 里的表�
 
 为避免疑义，明确列出本仓库刻意排除的内容：
 
-- ❌ `Compiler.exe` 及任何小米官方工具二进制
+- ❌ 任何小米官方工具二进制（含表盘编译器）
 - ❌ 从小米官方固件 / 官方表盘中提取的素材
 - ❌ 用于逆向分析的官方表盘样本（`.face` 样本留在本地，未提交）
 - ❌ 任何生成好的 `.face` 产物（含素材帧，体积大且可能涉及他人版权）

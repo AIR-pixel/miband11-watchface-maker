@@ -3,8 +3,11 @@
 
 跟 JVM 侧（`tools/diff/jvm/DiffMain.java`）用同一份用例表，各跑一遍，逐字节比对。
 本模块只服务这个回归，**不参与生产流程**；生产代码是
-`watchface-tool/watchface_tool/{lua,aod}.py` 与
+`watchface-tool/watchface_tool/{lua,aod,facebin}.py` 与
 `watchface-android/core/face/{LuaGen,AodGen,FaceBuilder}.java`。
+
+⚠️ 这里的 packer 是**第三份独立实现**，故意不复用 `facebin.py` —— 拿生产代码
+跟生产代码比，一次「两侧同时改错」的重构它抓不出来。
 
 ⚠️ 三条「两边必须一字不差」的约定，改一边就要同步另一边：
 
@@ -14,8 +17,7 @@
    `DiffMain.filesFor()` / `previewFor()` 必须给出同样的名字与字节。
 3. **规范文本** —— `canon()` 与 `DiffMain.canon()` 输出同样的行。
 
-为什么 AOD 的描述记录要在这里另写一份：Python 侧**没有**生产用的 packer
-（Windows 走 Compiler.exe，安卓走 Java），所以这边只能给参考实现。
+为什么 AOD 的描述记录要在这里另写一份：见上，独立实现才能当 oracle。
 它照的是 `docs/face格式规范.md` §11.8，不是照抄 Java。
 """
 import os

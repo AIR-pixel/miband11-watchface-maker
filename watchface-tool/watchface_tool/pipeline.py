@@ -9,7 +9,6 @@ from . import aod as aod_mod
 from . import build as build_mod
 from . import crop as crop_mod
 from . import extract as extract_mod
-from . import fprj as fprj_mod
 from . import lua as lua_mod
 from . import quantize as quantize_mod
 from .constants import (COMPRESS_LEVELS, DEFAULT_FPS, DEFAULT_MAX_FRAMES,
@@ -70,7 +69,6 @@ def generate_face(
     target_fps=DEFAULT_FPS,
     face_name="MyWatchface",
     face_id=None,
-    compiler_exe=None,
     show_time=True,
     output_dir=None,
     progress=None,
@@ -124,9 +122,7 @@ def generate_face(
     try:
         app_lua_dir = os.path.join(workdir, "app", "lua")
         images_dir = os.path.join(workdir, "images")
-        # Compiler.exe 会把 .info 写到 <fprj 同级的>/output/，目录必须预先存在
-        info_dir = os.path.join(workdir, "output")
-        for d in (app_lua_dir, images_dir, info_dir):
+        for d in (app_lua_dir, images_dir):
             os.makedirs(d, exist_ok=True)
 
         ext = quantize_mod.format_ext(fmt)
@@ -206,11 +202,6 @@ def generate_face(
         with open(os.path.join(app_lua_dir, "main.lua"), "w", encoding="utf-8") as f:
             f.write(lua_src)
 
-        fprj_bytes = fprj_mod.generate_fprj(face_name)
-        fprj_path = os.path.join(workdir, f"{face_name}.fprj")
-        with open(fprj_path, "wb") as f:
-            f.write(fprj_bytes)
-
         # ---- AOD 子工程 ----
         aod_bytes = 0
         if aod and aod.get("enabled"):
@@ -218,12 +209,14 @@ def generate_face(
             aod_mod.build_aod(workdir, aod)
             aod_bytes = aod_mod.estimate_aod_bytes(aod)
 
-        # ---- 打包 ----
-        report(0.88, "Compiler.exe 打包…")
+        # ---- 打包（纯代码，不调 Compiler.exe）----
+        report(0.88, "打包 .face…")
         if output_dir is None:
             output_dir = os.path.join(os.path.dirname(source_path) or ".", "watchface_out")
         face_path = build_mod.build_face(
-            compiler_exe, fprj_path, output_dir, f"{face_name}.face", face_id
+            workdir, output_dir, f"{face_name}.face", face_id,
+            first_wall_frames=wall_meta[0]["count"],
+            aod_cfg=aod,
         )
 
         report(1.0, "完成")
