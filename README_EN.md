@@ -16,8 +16,8 @@ Turn **video / GIF / still images** into an installable **animated watch face** 
 **Xiaomi Smart Band 11** (212×520, Vela OS) — in one click. Everything besides the wallpaper is
 configurable too: **always-on display (AOD), on-screen time & date, tap actions, multiple wallpapers**.
 
-Two independent implementations are provided — **Windows** and **Android** — sharing the same
-algorithms and producing the same output format.
+Three independent implementations are provided — **Windows**, **Android** and **Web** — sharing the
+same algorithms and producing the same output format.
 
 > ⚠️ This is an **unofficial third-party tool**, not affiliated with Xiaomi in any way.
 > Installing the generated watch face requires third-party tooling. See
@@ -32,9 +32,10 @@ algorithms and producing the same output format.
 | **Target device** | Xiaomi Smart Band 11 · 212×520 display · Vela OS (`DeviceType=466`) |
 | **Output** | `.face` (installable watch face) |
 | **Input** | Video (mp4/mov/mkv/webm/avi) · GIF · still images (png/jpg/bmp/webp) |
-| **Two implementations** | Windows (Python + tkinter) · Android (Kotlin UI + Java core) |
+| **Three implementations** | Windows (Python + tkinter) · Android (Kotlin UI + Java core) · Web (plain JS) |
 | **Windows requirements** | Python 3.8+ · Pillow · `ffmpeg` (video only) |
 | **Android requirements** | None |
+| **Web requirements** | None — open it in a browser, nothing to install |
 | **Official tooling** | **Not required on either platform** — no Vela IDE, no official binaries; `.face` is assembled in pure code |
 | **Size budget** | Rule of thumb ≤ 3.5 MB, estimated live as you change parameters |
 
@@ -88,10 +89,24 @@ Three things that matter:
 
 | Platform | Download | Notes |
 |---|---|---|
+| **Web** | <https://miband-watchface.app.workbuddy.host/> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
 | **Android** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | Install directly. Android 7.0+ (minSdk 24) |
 | **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
 
 > Android may warn about "unknown sources" during install; allow it in settings.
+
+### Web version
+
+Live: <https://miband-watchface.app.workbuddy.host/> ·
+Source: [miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web) (separate repo, dependency-free vanilla JS)
+
+The same container format reimplemented for the browser: GIF decoding, palette quantization, PNG
+encoding (zlib via `CompressionStream`), Lua generation and `.face` packing all happen client-side —
+**nothing is uploaded**. Accepts **GIF and video** (mp4/webm/mov, frames are extracted on the main
+thread when you hit generate), plus multiple wallpapers, AOD and on-screen time/date.
+
+The web version does not do JPEG frames (browser `canvas.toBlob` always uses 4:2:0 chroma
+subsampling, below the desktop build's 4:4:4); every other parameter matches the desktop version.
 
 ---
 

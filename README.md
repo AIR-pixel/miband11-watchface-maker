@@ -15,7 +15,7 @@
 把**视频 / GIF / 静态图**一键做成可安装到**小米手环 11**（212×520，Vela OS）的**动态表盘** `.face`。
 壁纸之外的部分也一并可配：**息屏 AOD、主屏时间日期、点击交互、多壁纸**。
 
-提供 **Windows 版**和**安卓版**两条独立实现，同一套算法、同样的产物格式。
+提供 **Windows 版**、**安卓版**和**网页版**三条独立实现，同一套算法、同样的产物格式。
 
 > ⚠️ 本项目是**非官方的第三方工具**，与小米公司无任何关联。生成表盘的安装需第三方工具配合，
 > 请自行评估风险。详见[免责声明](#免责声明)。
@@ -29,9 +29,10 @@
 | **目标设备** | 小米手环 11 · 屏幕 212×520 · Vela OS（`DeviceType=466`） |
 | **产物** | `.face`（可安装表盘） |
 | **输入** | 视频（mp4/mov/mkv/webm/avi）· GIF · 静态图（png/jpg/bmp/webp） |
-| **两条实现** | Windows（Python + tkinter）· 安卓（Kotlin 界面 + Java 核心） |
+| **三条实现** | Windows（Python + tkinter）· 安卓（Kotlin 界面 + Java 核心）· 网页（原生 JS） |
 | **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频） |
 | **安卓端依赖** | 无 |
+| **网页端依赖** | 无 —— 浏览器打开就能用，不用装任何东西 |
 | **官方工具** | 两端都**不需要**装 Vela IDE，也不需要任何官方二进制 —— 纯代码拼装 `.face` |
 | **体积预算** | 经验值 ≤ 3.5 MB，改参数时实时预估 |
 
@@ -48,7 +49,7 @@
 - [使用方法](#使用方法)
 - [体积控制的三条结论](#体积控制的三条结论)
 - [安装到手表](#安装到手表)
-- [双端一致性怎么保证](#双端一致性怎么保证)
+- [双端一致性怎么保证](#pc-与安卓的一致性怎么保证网页版另有一套)
 - [关于 AI 协助](#关于-ai-协助)
 - [项目经验](#项目经验)
 - [免责声明](#免责声明)
@@ -83,10 +84,23 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
+| **网页版** | <https://miband-watchface.app.workbuddy.host/> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
 | **安卓** | [watchface-tool-android-v2.2.0.apk](../../releases/latest/download/watchface-tool-android-v2.2.0.apk) | 直接安装。Android 7.0+（minSdk 24） |
 | **Windows** | [watchface-tool-pc-v2.2.0.zip](../../releases/latest/download/watchface-tool-pc-v2.2.0.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
 
 > 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。
+
+### 网页版
+
+在线版：<https://miband-watchface.app.workbuddy.host/> ·
+源码：[miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web)（独立仓库，零依赖原生 JS）
+
+同一套容器格式重写了一遍，跑在浏览器里：GIF 解码、调色板量化、PNG 编码（`CompressionStream`
+提供 zlib）、Lua 生成、`.face` 打包全在前端完成，**不上传任何素材**。
+支持 GIF 和**视频直接拖入**（mp4/webm/mov，点生成时在主线程抽帧），以及多壁纸、AOD、主屏时间日期。
+
+网页版不做 JPEG 帧（浏览器 `canvas.toBlob` 固定 4:2:0 色度子采样，画质低于桌面版的 4:4:4），
+其余参数与桌面版一致。
 
 ---
 
@@ -523,7 +537,7 @@ python main.py --cli \
 
 ---
 
-## 双端一致性怎么保证
+## PC 与安卓的一致性怎么保证（网页版另有一套）
 
 `main.lua` 的生成逻辑、AOD 的控件布局与描述块、`.face` 的拼装，在**两侧各有一份实现**
 （Python 与 Java/Kotlin）。这种「逐行照抄」最容易骗自己 —— 看着一样，字节不一样。
