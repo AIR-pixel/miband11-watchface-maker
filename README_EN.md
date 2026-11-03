@@ -98,15 +98,15 @@ Three things that matter:
 ### Web version
 
 Live: <https://miband-watchface.app.workbuddy.host/> ·
-Source: [miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web) (separate repo, dependency-free vanilla JS)
+Source: [watchface-web/](watchface-web/) (in this repo, dependency-free vanilla JS)
+Run locally: `cd watchface-web && node tests/serve.mjs 8765`, then open http://127.0.0.1:8765
 
 The same container format reimplemented for the browser: GIF decoding, palette quantization, PNG
 encoding (zlib via `CompressionStream`), Lua generation and `.face` packing all happen client-side —
 **nothing is uploaded**. Accepts **GIF and video** (mp4/webm/mov, frames are extracted on the main
 thread when you hit generate), plus multiple wallpapers, AOD and on-screen time/date.
 
-The web version does not do JPEG frames (browser `canvas.toBlob` always uses 4:2:0 chroma
-subsampling, below the desktop build's 4:4:4); every other parameter matches the desktop version.
+The web version now includes a built-in 4:4:4 JPEG encoder and no longer relies on the browser `canvas.toBlob` 4:2:0 chroma subsampling; every other parameter matches the desktop version.
 
 ---
 

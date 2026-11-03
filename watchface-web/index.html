@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>表盘工坊 · 小米手环表盘生成器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0e13'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%237ee3b2' stroke-width='2.5'/%3E%3Cpath d='M16 10v6l4 3' stroke='%237ee3b2' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="mark">⌚</span>
+    <div>
+      <h1>表盘工坊</h1>
+      <p>GIF / 视频 → 小米手环 11 表盘 <code>.face</code><span class="wide-only">，全程在浏览器里完成</span></p>
+    </div>
+  </div>
+  <a class="gh" href="#how">怎么做到的</a>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="band">
+      <span class="strap up"></span>
+      <div class="device">
+        <canvas id="preview" width="212" height="520"></canvas>
+        <div class="glow"></div>
+        <span class="glass"></span>
+        <span class="btn-side"></span>
+      </div>
+      <span class="strap down"></span>
+    </div>
+    <div class="stage-meta">
+      <span id="srcInfo">等待素材</span>
+      <span class="dot">·</span>
+      <span>212 × 520</span>
+    </div>
+    <div class="tabs" id="viewTabs">
+      <button data-v="main" class="on">主屏</button>
+      <button data-v="aod">息屏</button>
+    </div>
+    <div id="drop" class="drop">
+      <strong>拖入 GIF 或视频</strong>
+      <span>mp4 / webm / mov · 可选多个，第二张起为一页独立壁纸</span>
+      <input type="file" id="file" accept="image/gif,video/mp4,video/webm,video/quicktime,video/*" multiple hidden />
+    </div>
+    <div id="wallList" class="walls" hidden></div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <label>画质档位 <span class="tip" id="levelTip"></span></label>
+      <div class="seg" id="level">
+        <button data-v="tiny">P64 · 极限</button>
+        <button data-v="small">P128 · 小体积</button>
+        <button data-v="balanced" class="on">P256 · 均衡</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>编码格式</label>
+      <div class="seg" id="fmt">
+        <button data-v="png" class="on">PNG · 无损</button>
+        <button data-v="jpg">JPEG · 有损</button>
+      </div>
+    </div>
+
+    <div class="row" id="jpgRow" hidden>
+      <label>JPEG 质量 <span class="tip">4:4:4 不压色度</span></label>
+      <select id="jpgQuality">
+        <option value="90">90 · 最高</option>
+        <option value="85">85</option>
+        <option value="80" selected>80 · 默认</option>
+        <option value="70">70</option>
+        <option value="60">60 · 最小</option>
+      </select>
+    </div>
+
+    <div class="row two">
+      <div>
+        <label>目标帧率</label>
+        <select id="fps">
+          <option>6</option><option>8</option><option selected>12</option>
+          <option>16</option><option>24</option>
+        </select>
+      </div>
+      <div>
+        <label>帧数上限</label>
+        <select id="maxFrames">
+          <option>24</option><option>48</option><option selected>96</option>
+          <option>144</option><option>240</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row two">
+      <div>
+        <label>截取起点 <span class="tip">秒</span></label>
+        <input id="clipStart" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+      </div>
+      <div>
+        <label>截取时长 <span class="tip">秒 · 留空取全片</span></label>
+        <input id="clipDur" type="number" min="0" step="0.1" placeholder="全片" inputmode="decimal" />
+      </div>
+    </div>
+
+    <div class="row two">
+      <div>
+        <label>表盘名称 <span class="tip">仅 ASCII · 16 字节</span></label>
+        <input id="title" value="MyFace" maxlength="16" spellcheck="false" />
+      </div>
+      <div>
+        <label>表盘 ID <span class="tip">10 位数字</span></label>
+        <input id="faceId" value="1000000001" maxlength="10" inputmode="numeric" spellcheck="false" />
+      </div>
+    </div>
+
+    <div class="row switch-row">
+      <div class="sw">
+        <input type="checkbox" id="showTime" checked />
+        <label for="showTime">叠加时间</label>
+      </div>
+      <div class="sw">
+        <input type="checkbox" id="showDate" />
+        <label for="showDate">叠加日期</label>
+      </div>
+      <div class="sw">
+        <input type="checkbox" id="tapAnim" />
+        <label for="tapAnim">短按暂停动画</label>
+      </div>
+    </div>
+
+    <div class="aod">
+      <div class="aod-head">
+        <div class="sw">
+          <input type="checkbox" id="aodOn" />
+          <label for="aodOn">息屏显示（AOD）</label>
+        </div>
+        <span class="aod-cost" id="aodCost">—</span>
+      </div>
+      <div class="aod-body" id="aodBody">
+        <div class="row two">
+          <div>
+            <label>息屏内容</label>
+            <select id="aodMode">
+              <option value="time">时间</option>
+              <option value="both">时间 + 日期</option>
+            </select>
+          </div>
+          <div>
+            <label>数字颜色</label>
+            <input id="aodColor" value="#FFFFFF" maxlength="7" />
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>时间 Y <output id="aodTimeYOut">200</output></label>
+            <input type="range" id="aodTimeY" min="0" max="440" step="4" value="200" />
+          </div>
+          <div>
+            <label>日期 Y <output id="aodDateYOut">300</output></label>
+            <input type="range" id="aodDateY" min="0" max="460" step="4" value="300" />
+          </div>
+        </div>
+        <p class="aod-note">息屏屏不支持 Lua，只能靠静态图与数字位图驱动；默认不放全屏黑底（AMOLED 黑不发光）。</p>
+      </div>
+    </div>
+
+    <div class="row two" id="timeStyle">
+      <div>
+        <label>时间字号</label>
+        <input type="range" id="timeSize" min="24" max="72" step="4" value="48" />
+      </div>
+      <div>
+        <label>纵向位置 <output id="timeOfsOut">30</output></label>
+        <input type="range" id="timeOfs" min="0" max="400" step="4" value="30" />
+      </div>
+    </div>
+
+    <div class="budget">
+      <div class="budget-head">
+        <span id="budgetLabel">体积预算</span>
+        <b id="budgetTotal">—</b>
+      </div>
+      <div class="bar">
+        <div class="bar-fixed" id="barFixed"></div>
+        <div class="bar-frames" id="barFrames"></div>
+        <div class="bar-aod" id="barAod" hidden></div>
+      </div>
+      <div class="budget-legend">
+        <span><i class="sw-fixed"></i>固定开销 <b id="fixedKb">431</b> KB（选择器预览图，压不下去）</span>
+        <span><i class="sw-frames"></i>动画帧 <b id="framesKb">0</b> KB</span>
+        <span id="aodRow" hidden><i class="sw-aod"></i>息屏 <b id="aodKb">0</b> KB</span>
+      </div>
+    </div>
+
+    <button id="build" class="primary" disabled>生成 .face</button>
+    <p class="hint" id="hint">先拖一张 GIF 或一段视频进来。</p>
+    <div class="progress"><div id="bar"></div></div>
+  </section>
+</main>
+
+<section id="how" class="how">
+  <h2>怎么做到的</h2>
+  <p>
+    <code>.face</code> 不是黑盒。文件头、Title、元数据槽、索引表、描述块、
+    数据区，再到尾部 212×520 的预览位图 —— 整条容器布局都摸清楚了，
+    打包因此可以纯前端完成：解码素材、生成 Lua、拼字节，全在浏览器里。
+  </p>
+  <p class="small">
+    容器与官方编译器逐字节相同，单壁纸、带 AOD、三壁纸、JPEG 帧都验过。
+    仓库 <code>tools/</code> 里有差分脚本，可以自己跑一遍。
+  </p>
+</section>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

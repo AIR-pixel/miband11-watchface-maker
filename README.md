@@ -93,13 +93,14 @@
 ### 网页版
 
 在线版：<https://miband-watchface.app.workbuddy.host/> ·
-源码：[miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web)（独立仓库，零依赖原生 JS）
+源码：[watchface-web/](watchface-web/)（本仓库内，零依赖原生 JS）
+本地运行：`cd watchface-web && node tests/serve.mjs 8765`，浏览器打开 http://127.0.0.1:8765
 
 同一套容器格式重写了一遍，跑在浏览器里：GIF 解码、调色板量化、PNG 编码（`CompressionStream`
 提供 zlib）、Lua 生成、`.face` 打包全在前端完成，**不上传任何素材**。
 支持 GIF 和**视频直接拖入**（mp4/webm/mov，点生成时在主线程抽帧），以及多壁纸、AOD、主屏时间日期。
 
-网页版不做 JPEG 帧（浏览器 `canvas.toBlob` 固定 4:2:0 色度子采样，画质低于桌面版的 4:4:4），
+网页版已内置 4:4:4 JPEG 编码器，不再依赖浏览器 `canvas.toBlob` 的 4:2:0 色度子采样，
 其余参数与桌面版一致。
 
 ---
