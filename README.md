@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![Android](https://img.shields.io/badge/android-7.0%2B-3ddc84?logo=android)](https://github.com/AIR-pixel/miband11-watchface-maker/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Android-lightgrey)](https://github.com/AIR-pixel/miband11-watchface-maker)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Android%20%C2%B7%20Web-lightgrey)](https://github.com/AIR-pixel/miband11-watchface-maker)
 
 [English](./README_EN.md) · **简体中文**
 
@@ -30,10 +30,10 @@
 | **产物** | `.face`（可安装表盘） |
 | **输入** | 视频（mp4/mov/mkv/webm/avi）· GIF · 静态图（png/jpg/bmp/webp） |
 | **三条实现** | Windows（Python + tkinter）· 安卓（Kotlin 界面 + Java 核心）· 网页（原生 JS） |
-| **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频） |
+| **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频）· tkinterdnd2（拖拽素材用，可选） |
 | **安卓端依赖** | 无 |
 | **网页端依赖** | 无 —— 浏览器打开就能用，不用装任何东西 |
-| **官方工具** | 两端都**不需要**装 Vela IDE，也不需要任何官方二进制 —— 纯代码拼装 `.face` |
+| **官方工具** | 三端都**不需要**装 Vela IDE，也不需要任何官方二进制 —— 纯代码拼装 `.face` |
 | **体积预算** | 经验值 ≤ 3.5 MB，改参数时实时预估 |
 
 ---
@@ -74,8 +74,8 @@
 1. **框选裁剪** —— 任意素材自动吸附到 212:520，无黑边。
 2. **体积可控** —— 表盘有体积预算（经验值 ≤ 3.5 MB），这个工具能精确控制到每一档，
    并且**改参数时实时显示预估体积**，不用反复试。
-3. **两端都不依赖官方编译器** —— 官方编译器是 x86 Windows 二进制，安卓本来就跑不了。
-   本项目两端都**按二进制格式纯代码拼装** `.face`（Python 与 Java 各一份实现），
+3. **三端都不依赖官方编译器** —— 官方编译器是 x86 Windows 二进制，安卓本来就跑不了。
+   本项目三端都**按二进制格式纯代码拼装** `.face`（Python、Java、JS 各一份实现），
    产物与编译器输出**逐字节一致**，所以它生成的就是真表盘，不是「半成品工程文件」。
 
 ---
@@ -84,21 +84,25 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
-| **网页版** | <https://miband-watchface.app.workbuddy.host/> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
+| **网页版** | <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
 | **安卓** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | 直接安装。Android 7.0+（minSdk 24） |
 | **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
 
-> 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。
+> 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。只从本仓库 Releases 下载，不要用第三方镜像；安装完成后建议关闭为该安装来源开启的“未知来源”权限。
 
 ### 网页版
 
-在线版：<https://miband-watchface.app.workbuddy.host/> ·
+在线版：<https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
 源码：[watchface-web/](watchface-web/)（本仓库内，零依赖原生 JS）
 本地运行：`cd watchface-web && node tests/serve.mjs 8765`，浏览器打开 http://127.0.0.1:8765
 
 同一套容器格式重写了一遍，跑在浏览器里：GIF 解码、调色板量化、PNG 编码（`CompressionStream`
 提供 zlib）、Lua 生成、`.face` 打包全在前端完成，**不上传任何素材**。
 支持 GIF 和**视频直接拖入**（mp4/webm/mov，点生成时在主线程抽帧），以及多壁纸、AOD、主屏时间日期。
+
+> 注意：不带 `sharecode` 的裸链接只会打开 WorkBuddy 的“链接不完整”提示页，不能直接用；必须用上面带 `sharecode` 的完整链接。如果在线版打不开，优先用本地运行方式。
+
+网页版目前只接受 GIF / 视频，不接受静态图；静态图请用 Windows / 安卓版。
 
 网页版已内置 4:4:4 JPEG 编码器，不再依赖浏览器 `canvas.toBlob` 的 4:2:0 色度子采样，
 其余参数与桌面版一致。
@@ -544,6 +548,8 @@ python main.py --cli \
 （Python 与 Java/Kotlin）。这种「逐行照抄」最容易骗自己 —— 看着一样，字节不一样。
 
 所以仓库里带了一个**跨语言差分回归**：`python tools/diff_face.py`（约 40 s，只需 JDK + Pillow）。
+
+> 注意：`diff_face.py` 只覆盖 Python 与 Java/Kotlin 两份实现，网页版不在其覆盖范围内；网页版的等价性靠 `watchface-web/tests/` 里的逐字节回归与 UI 端到端测试保证，详见 [watchface-web/README.md](./watchface-web/README.md)。
 它用同一份用例表让两份实现各跑一遍，然后**逐字节**比对：
 
 | 阶段 | 比对对象 | 例数 |
@@ -680,6 +686,7 @@ miband11-watchface-maker/
 │   ├── bench_quality.py        体积 / 画质实测脚本
 │   ├── lint_lua.py             给生成的 main.lua 做语法校验（全参数组合）
 │   ├── diff_face.py            **跨语言差分回归**：Python 实现 ↔ JVM 实现逐字节对拍
+│   ├── roundtrip_face.py         往返拆包-重打包回归：官方编译器产物逐字节一致
 │   ├── gen_aod_font.py         生成两端同源的 AOD 内嵌字库
 │   └── diff/                   上者的用例表、JVM 驱动与 Python 参考实现
 ├── watchface-tool/             Windows 版（Python + tkinter）
@@ -696,10 +703,18 @@ miband11-watchface-maker/
 │       ├── lua.py              生成 main.lua（动画 + 时间日期 + 交互 + 省电钩子）
 │       ├── aod.py              生成 AOD 息屏子工程（数字位图 + 数据源绑定）
 │       ├── aod_font.py         AOD 内嵌字库（由 tools/gen_aod_font.py 生成）
-│       ├── fprj.py             生成 .fprj（UTF-16 XML）
 │       ├── facebin.py          .face 打包/解包核心（纯代码，零第三方依赖）
 │       ├── build.py            收集工程文件 → 打包 → 落盘
 │       └── pipeline.py         编排
+├── watchface-web/            网页版（原生 JS，零依赖）
+│   ├── index.html              界面入口
+│   ├── app.js                  界面逻辑（预览、参数、体积预算）
+│   ├── style.css               界面样式
+│   ├── package.json            包信息（type: module）
+│   ├── src/
+│   │   ├── worker.js           生成任务跑在 Worker 里
+│   │   └── core/               GIF 解码、视频抽帧、量化、PNG/JPEG 编码、Lua 生成、.face 打包
+│   └── tests/                  逐字节回归、结构检查、UI 端到端（不含 tests/golden-src/ 二进制素材）
 └── watchface-android/          安卓版（Kotlin 界面 + Java 核心）
     ├── build.sh                无 Gradle 构建脚本（javac + kotlinc + R8）
     ├── fetch_kotlinc.sh        拉一套最小 Kotlin CLI
