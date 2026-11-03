@@ -1,724 +1,258 @@
-# miband11-watchface-maker
+# 表盘工坊（网页版）
 
-<div align="center">
+> 本网页版已合并进 miband11-watchface-maker 仓库，位于 `watchface-web/`。本地运行仍在该目录下执行：`node tests/serve.mjs 8765`。
 
-[![Release](https://img.shields.io/github/v/release/AIR-pixel/miband11-watchface-maker?label=release&color=2ea44f)](https://github.com/AIR-pixel/miband11-watchface-maker/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
-[![Android](https://img.shields.io/badge/android-7.0%2B-3ddc84?logo=android)](https://github.com/AIR-pixel/miband11-watchface-maker/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Android-lightgrey)](https://github.com/AIR-pixel/miband11-watchface-maker)
+GIF / 视频 → 小米手环 11 动态表盘 `.face`，**纯前端，不依赖 `Compiler.exe`，也不生成 `.fprj`**。
 
-[English](./README_EN.md) · **简体中文**
+输入 GIF 或视频，多张素材各成一页壁纸（短按切换），可叠加时间/日期、可带 AOD 息屏，
+帧图可选无损调色板 PNG 或 4:4:4 的 JPEG，还能按秒只取素材中的一段。
 
-</div>
+官方链路是「Vela IDE → 手写 Lua/XML → 跑 `Compiler.exe` 打包」。这里把最后一步用纯代码
+重写了一遍：容器布局（文件头 / Title / 元数据槽 / 索引表 / 描述块 / 数据区 / 尾部
+212×520 预览位图）已完整逆向，打包就是字节搬运。
 
-把**视频 / GIF / 静态图**一键做成可安装到**小米手环 11**（212×520，Vela OS）的**动态表盘** `.face`。
-壁纸之外的部分也一并可配：**息屏 AOD、主屏时间日期、点击交互、多壁纸**。
+线上：<https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5>
 
-提供 **Windows 版**、**安卓版**和**网页版**三条独立实现，同一套算法、同样的产物格式。
+## 为什么这份实现敢说自己产出的是真表盘
 
-> ⚠️ 本项目是**非官方的第三方工具**，与小米公司无任何关联。生成表盘的安装需第三方工具配合，
-> 请自行评估风险。详见[免责声明](#免责声明)。
+不是"我觉得应该长这样"，是逐字节对拍出来的：
 
----
-
-## 速览
-
-| | |
-|---|---|
-| **目标设备** | 小米手环 11 · 屏幕 212×520 · Vela OS（`DeviceType=466`） |
-| **产物** | `.face`（可安装表盘） |
-| **输入** | 视频（mp4/mov/mkv/webm/avi）· GIF · 静态图（png/jpg/bmp/webp） |
-| **三条实现** | Windows（Python + tkinter）· 安卓（Kotlin 界面 + Java 核心）· 网页（原生 JS） |
-| **Windows 端依赖** | Python 3.8+ · Pillow · `ffmpeg`（仅视频） |
-| **安卓端依赖** | 无 |
-| **网页端依赖** | 无 —— 浏览器打开就能用，不用装任何东西 |
-| **官方工具** | 两端都**不需要**装 Vela IDE，也不需要任何官方二进制 —— 纯代码拼装 `.face` |
-| **体积预算** | 经验值 ≤ 3.5 MB，改参数时实时预估 |
-
----
-
-## 目录
-
-- [它解决什么问题](#它解决什么问题)
-- [下载](#下载)
-- [界面截图](#界面截图)
-- [功能](#功能)
-- [配置说明](#配置说明)
-- [功能自定义详解](#功能自定义详解)
-- [使用方法](#使用方法)
-- [体积控制的三条结论](#体积控制的三条结论)
-- [安装到手表](#安装到手表)
-- [双端一致性怎么保证](#pc-与安卓的一致性怎么保证网页版另有一套)
-- [关于 AI 协助](#关于-ai-协助)
-- [项目经验](#项目经验)
-- [免责声明](#免责声明)
-- [许可](#许可)
-- [项目结构](#项目结构)（折叠）
-
----
-
-## 它解决什么问题
-
-小米手环 11 的**动态表盘必须走 Vela Lua（Lua + LVGL）**才能做，官方「相册表盘」只能放静态图。
-而官方链路要求装 Vela IDE、手写 Lua、调 LVGL、再跑官方编译器打包 —— 门槛不低。
-
-这个项目把整条链路收成一个界面操作：
-
-```
-导入视频/GIF/图片  →  框选裁剪区  →  调压缩/帧率/时长  →  生成 .face
-```
-
-三个关键点：
-
-1. **框选裁剪** —— 任意素材自动吸附到 212:520，无黑边。
-2. **体积可控** —— 表盘有体积预算（经验值 ≤ 3.5 MB），这个工具能精确控制到每一档，
-   并且**改参数时实时显示预估体积**，不用反复试。
-3. **两端都不依赖官方编译器** —— 官方编译器是 x86 Windows 二进制，安卓本来就跑不了。
-   本项目两端都**按二进制格式纯代码拼装** `.face`（Python 与 Java 各一份实现），
-   产物与编译器输出**逐字节一致**，所以它生成的就是真表盘，不是「半成品工程文件」。
-
----
-
-## 下载
-
-| 平台 | 下载 | 说明 |
+| 验证 | 内容 | 状态 |
 |---|---|---|
-| **网页版** | <https://miband-watchface.app.workbuddy.host/> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
-| **安卓** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | 直接安装。Android 7.0+（minSdk 24） |
-| **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
+| 同参数双跑 | 同一套参数分别走 `Compiler.exe` 与纯代码版，`cmp` 逐字节比对 | ✅ 5/5 零差异 |
+| 往返回归 | 5 份**官方编译器产物**拆开再用本仓库的打包器拼回去，逐字节一致 | ✅ 5/5 |
+| 样本覆盖 | 单壁纸 P256 / AOD 时间 / AOD 时间+日期+主屏日期 / 三壁纸+cycle / JPEG q80 | ✅ |
+| 结构校验 | 用原仓库的 `tools/verify_face.py` 独立验产物：帧数、Lua 引用、帧率、屏数、尾部尺寸 | ✅ 结构正确 |
+| Lua 语法 | 产物里的 `main.lua` 过 `luaparser` | ✅ |
+| PNG 可解码 | 产物里的帧图用 **Pillow** 逐张打开，模式 `P`、尺寸 212×520 | ✅ |
+| AOD 结构 | 带息屏的产物过 `verify_face.py`：屏数 2、索引表 360、描述块分组条数正确 | ✅ |
+| 描述块顺序 | 产物里 tag 序列单调 锚(0x0000) → 位图(0x0200) → 数组(0x0300) → 小件(0x0700) | ✅ |
+| 预览通道序 | 尾部位图与官方产物的通道均值完全一致（BGRA 直通 alpha） | ✅ |
+| 字段编码 | Title(16 B) / ID(10 B) 是定长 ASCII：非 ASCII 逐码点替换成 `?`，与 PC 端 `encode("ascii","replace")` 逐字节相同 | ✅ |
+| Node 侧烟雾 | `build_face` / `aod_build` / `multi_wall` 三个脚本自带断言，零参数可直接跑 | ✅ 全绿 |
+| UI 端到端 | 真浏览器（Edge）选 GIF → 点生成 → 接下载 → 校验 | ✅ |
+| 多壁纸端到端 | 多选 3 张 → 列表 → 点页换预览 → 删一页 → 生成，产物 `lua/face×8 · lua/w2×12` | ✅ |
+| 视频输入端到端 | mp4 + GIF 混排 → 抽 36 + 8 帧 → 生成 → `verify_face.py` + Pillow 逐帧 | ✅ |
+| JPEG 编码器 | 产物 SOF0 三分量采样因子全是 `0x11`；Pillow 独立解码，亮度 PSNR 43.4 dB，色度比同质量 4:2:0 对照高 10 dB 以上 | ✅ |
+| 截取区间 | 3.0s 素材取中间 1.0s：帧数按区间算、选中帧全落在区间内、换起点后首帧字节不同 | ✅ |
+| 视频裁切 | 起点 2s / 时长 1s → 12 帧，首帧与不裁时不同（时间点确实带了偏移） | ✅ |
+| 三件同开 | 界面同时开「JPEG q70 + 裁切 + 两壁纸」→ 20 帧 `.jpg`、Lua `EXT="jpg"`、`verify_face.py` 结构正确 | ✅ |
+| 手机窄屏 | 390 / 375 px 下 `scrollWidth == clientWidth`，无横向溢出 | ✅ |
+| 内置示例 | 示例在播、`换`按钮切三套画（luma 38 → 22）、没有真实素材时「生成」保持禁用 | ✅ |
+| 展示出图 | `shot_showcase.mjs` 一次出 7 张（手环特写 / 整页 / 双壁纸 / 生成完成 / 息屏 / 手机端） | ✅ |
 
-> 安卓版安装时系统可能提示「未知来源应用」，需在设置里允许。
+官方样本（`G1`–`G5`）由本机 `Compiler.exe` 现场生成、放在仓库外的会话 scratch 里
+（仓库规矩：不提交 `*.face` 产物），`tests/golden-src/` 里只有合成素材。
 
-### 网页版
+> ⚠️ 别把 `face-exp/out` 那批一起当回归基线：那里混着 10-01 AOD 分层实验期的产物
+> （只有锚点记录、没位图的空壳 AOD），形状不在本打包器覆盖范围内。
+> `tests/roundtrip.mjs` 默认只跑 `face-exp/pc-golden`。
 
-在线版：<https://miband-watchface.app.workbuddy.host/> ·
-源码：[miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web)（独立仓库，零依赖原生 JS）
+### 两个文档里没写过的坑
 
-同一套容器格式重写了一遍，跑在浏览器里：GIF 解码、调色板量化、PNG 编码（`CompressionStream`
-提供 zlib）、Lua 生成、`.face` 打包全在前端完成，**不上传任何素材**。
-支持 GIF 和**视频直接拖入**（mp4/webm/mov，点生成时在主线程抽帧），以及多壁纸、AOD、主屏时间日期。
+**多壁纸时描述块哨兵的 `idx` 不是 `n-1`，而是第一页的帧数。**
+实测：第一页 2 帧 / 第二页 6 帧 / 第三页 4 帧 → 哨兵 `idx = 2`；单壁纸时它恰好等于
+`n-1`，所以只测单壁纸永远发现不了。设备侧看起来不用这个字段，但要逐字节一致就得照抄。
 
-网页版不做 JPEG 帧（浏览器 `canvas.toBlob` 固定 4:2:0 色度子采样，画质低于桌面版的 4:4:4），
-其余参数与桌面版一致。
+**索引表按文件名升序排，不是"帧在前、lua 最后"。**
+实际顺序是 `lua/face_*` → `lua/main.lua` → `lua/w2_*` → `lua/w3_*`。按「帧在前、lua 最后」
+打包，产物照样能用，但和官方字节对不上 —— 这种"能用但不一致"最难发现。
 
----
+## 跑起来
 
-## 界面截图
+```bash
+node tests/serve.mjs 8765      # 起个静态服务
+# 浏览器打开 http://127.0.0.1:8765
+```
 
-<table>
-<tr>
-<td align="center"><b>Windows · 页签 ① 动态壁纸</b><br>
-<sub>框选裁剪 + 压缩/帧率/帧数 + 实时体积预估</sub><br>
-<img src="docs/images/win-1-wallpaper.png" width="280" alt="Windows 页签 1"></td>
-<td align="center"><b>Windows · 页签 ② 功能自定义</b><br>
-<sub>AOD 预览 · 主屏时间日期 · 交互 · 多壁纸</sub><br>
-<img src="docs/images/win-2-function.png" width="280" alt="Windows 页签 2"></td>
-</tr>
-<tr>
-<td align="center"><b>安卓版 · 浅色</b><br>
-<sub>Material 3，配色跟随系统</sub><br>
-<img src="docs/images/android-light.png" width="280" alt="安卓版浅色"></td>
-<td align="center"><b>安卓版 · 深色</b><br>
-<sub>Android 12+ 从壁纸取色，低版本退回基线蓝</sub><br>
-<img src="docs/images/android-dark.png" width="280" alt="安卓版深色"></td>
-</tr>
-</table>
+不需要 `npm install`：所有核心代码零依赖，`CompressionStream('deflate')` 提供 PNG 需要的
+zlib 流。
 
-> 安卓版这两张是**按源码里的 dp 与配色参数离线重绘**的效果图，不是真机截图（开发环境无安卓设备）。
-> 布局与配色是照 `MainActivity.kt` / `Palette.kt` 逐项算出来并校验过的
-> （见 [docs/项目经验.md](./docs/项目经验.md)）。Windows 版那两张是真机运行截图。
+## 结构
 
----
+```
+index.html / style.css / app.js     界面（预览、参数、体积预算）
+src/worker.js                       生成任务跑在 Worker 里，避免几百帧卡界面
+src/core/gif.js                     GIF 解码（LZW + disposal 2/3 + 透明索引）
+src/core/video.js                   视频抽帧（seek + drawImage，必须在主线程）
+src/core/image.js                   居中裁剪 + 面积平均缩放
+src/core/quantize.js                中位切分调色板（+ 可选 Floyd–Steinberg）
+src/core/png.js                     调色板 PNG 编码（IHDR/PLTE/IDAT/IEND + CRC32）
+src/core/jpeg.js                    baseline JPEG 编码器（强制 4:4:4，浏览器原生做不到）
+src/core/lua.js                     main.lua 生成（时间/日期、省电双钩子、点击）
+src/core/demo.js                    内置示例壁纸（三套，代码绘制，零素材依赖）
+src/core/facebin.js                 .face 打包 + 解包（唯一需要精度的部分）
+src/core/build.js                   端到端编排（素材统一收敛成「n 帧 RGBA + 播放节奏」）
+tests/                              逐字节回归、结构检查、UI 端到端、本地服务
+tests/jpeg.mjs                      JPEG 编码器验收（表结构 / 码流自检 / PSNR / 4:2:0 对照）
+tests/clip_fmt.mjs                  截取区间 × 编码格式 × 多壁纸（单测 + 端到端）
+tests/make_fixtures.py              重新生成 golden-src 里的测试/展示素材
+tests/shot_showcase.mjs             出一套投稿/社媒用的展示图
+```
 
-## 功能
+## 验证怎么跑
 
-| 功能 | 说明 |
-|---|---|
-| **多格式素材输入** | 视频、GIF、静态图（见[速览](#速览)） |
-| **框选裁剪** | 拖拽选择保留区域，比例自动锁定 212:520；支持角点拖拽、滚轮缩放、双指缩放 |
-| **截取区间** | 指定起始秒数与时长，只取素材的一段 |
-| **帧率可选** | 6 / 8 / 12 / 16 / 20 / 24 / 30 FPS，或沿用源素材帧率 |
-| **帧数上限** | 体积的第一杠杆。超出上限时二选一（见下） |
-| **色深 6 档 / 编码 2 种** | 见[配置说明](#配置说明) |
-| **快放模式** | 帧数触顶时可保持帧率、压掉播放时长（内容完整 + 流畅，代价是播放变快） |
-| **实时体积预估** | 改任何参数立刻显示「预计 N 帧 · 约 X MB · 播放 Y s」，超预算标红 |
-| **叠加时间日期** | 生成的 Lua 订阅系统时间并绘制；**位置、字号、颜色、格式都可调** |
-| **息屏显示（AOD）** | 生成 `AOD/` 子工程。缺了它手环会**停在动画最后一帧** |
-| **点击交互** | 短按表盘：切换壁纸 / 显隐时间日期 / 暂停动画 |
-| **多壁纸** | 一次打包多张动态壁纸，短按轮换 |
-| **自定义表盘名 / ID** | ID 可随机生成，避免与市集表盘撞车 |
-| **命令行** | Windows 版支持纯 CLI，便于脚本化 / 批量生成 |
+```bash
+# 0. 容器 / 结构（零依赖，不需要浏览器）
+node tests/build_face.mjs            # 单壁纸全链路，自带描述块、帧数、哨兵断言
+node tests/aod_build.mjs             # AOD 描述块分组顺序 + 体积增量估算
+node tests/multi_wall.mjs            # 三壁纸：页数 / 帧分配 / 哨兵 idx / Lua WALLS
+node tests/roundtrip.mjs             # 往返拆包-重打包（需 face-exp/pc-golden 样本）
+node tests/jpeg.mjs                  # JPEG：码流自检 + Pillow 解码算 PSNR + 4:2:0 对照
+node tests/clip_fmt.mjs              # 裁切 / JPEG / 多壁纸三件一起验
 
-### 帧数触顶时：流畅度 × 时长只能保一个
+# 1. 结构校验（用原仓库的独立工具）
+python ../tools/verify_face.py out/MyFace.face
 
-这是最容易被忽略、但实际最常碰到的权衡。给定帧数上限后，
-**抽帧和播放节奏是可以解耦的两件事**：
+# 2. 浏览器端到端（需要 playwright + 系统 Edge）
+node tests/serve.mjs 8765 &
+node tests/ui_smoke.mjs              # 单 GIF 冒烟
+node tests/ui_multi.mjs              # 多壁纸：多选 / 选页 / 删除 / 生成
+node tests/ui_video.mjs              # 视频+GIF 混排，抽帧后逐帧用 Pillow 验
+node tests/ui_fmt_clip.mjs           # 界面上同时开 JPEG + 裁切 + 两壁纸，产物独立核对
+node tests/mobile_shot.mjs           # 390 / 375 px 截图 + 横向溢出检测
 
-| 模式 | 抽帧 | 播放 | 结果 |
+# 3. 出展示图（投稿 / 社媒用）
+node tests/shot_showcase.mjs         # 7 张到 tests/out/showcase-*.png
+python tests/make_fixtures.py        # 素材要重画时跑这个（b.gif / w1.gif / w2.gif）
+```
+
+`ui_multi` / `ui_video` 都支持 `BASE=https://...` 直接打线上地址 —— 上线后跑一遍，
+才能证明"线上就是本地这份"，而不是只在本地能跑。
+`PW` / `PY` 环境变量可覆盖 playwright 与 python 路径（默认取本机托管安装）。
+
+## 首屏就有动效：内置示例 + 手环外壳
+
+打开就有一块表在播动画，不需要先准备素材：
+
+- **外壳是 CSS 画的**（锥形表带 + 圆角表壳 + 斜向玻璃反光 + 右侧实体键），屏幕区域就是真正的
+  212×520 画布 —— 预览里看到的构图就是表上的构图，不做二次缩放。
+- **示例壁纸是代码画的**（`src/core/demo.js`，三套：极光 / 波纹 / 网格），24 帧 ≈ 12 fps，
+  点行尾的 `换` 切下一套。纯函数绘制，同输入同输出，零图片资源。
+- 示例**只用于演示，不能生成**：列表里全是示例时「生成」保持禁用；拖入真实素材后示例自动让位
+  （免得混进产物）。删光所有真实壁纸，示例会自己回来，预览不留空白。
+
+为什么要有它：仓库不提交素材文件，而首屏一片空预览会让人以为工具坏了。
+
+## 素材：GIF 与视频
+
+- 拖入时按类型自动分流：`.gif` 走本模块自己的 LZW 解码，`.mp4/.webm/.mov/...` 走视频抽帧。
+- 视频**只在点「生成」时抽帧**，加载阶段只解码出首帧当预览（下面标一个「视频 · 点生成时抽帧」角标）。
+- 抽帧发生在**主线程**：Worker 里没有 `<video>`。抽完的 RGBA 帧按 Transferable 交给 Worker 编码，
+  零拷贝。
+- 抽帧方式是 **seek + `drawImage`**，不是顺序播放。总耗时只和帧数有关，和视频长度无关 ——
+  3 秒和 3 分钟的视频抽 36 帧，用时一样。
+- 选帧规则和 GIF 完全一致（`planUniform`）：等间隔取，帧数触顶就**降帧率、保住时长**。
+
+## 编码格式：PNG 与 JPEG
+
+两种都在，默认 PNG。
+
+- **PNG**：中位切分量化到 256 / 128 / 64 色调色板，再无损压缩。纯色、扁平画面它最省。
+- **JPEG**：自己写的 baseline 4:4:4 编码器（`src/core/jpeg.js`），质量 60–90。
+
+为什么不用 `canvas.toBlob("image/jpeg")`：浏览器原生编码器**恒为 4:2:0**。q 从 0.6 到 0.95
+逐档试过，SOF0 里的采样因子始终是 `2x2 1x1 1x1`，没有一档是 4:4:4 —— 色度被降到一半
+分辨率，彩色边缘会糊成一片脏色，而表盘底图往往就是高饱和渐变。反过来说，关掉子采样
+只多 19% 体积，色度 PSNR 却涨 2.5 dB。
+
+实现是常规写法：FDCT 分离成「先做行、再做列」（每块 1024 次乘加，朴素二维要 4096）、
+标准 Huffman 表（从 libjpeg 的实际输出里解析提取，不手抄规范）、量化表按
+`q < 50 → 5000/q，否则 200 - 2q` 缩放。四个坑都踩过：段长 `Lq` 多报 2 字节会让解析器
+把下一个 marker 当段数据吞掉；头部 marker 里的 `0xFF` **不能**补 `0x00`（只有熵编码段要补）；
+EOI 必须跟在熵数据之后，不能写进头部；YUV 转换要用 `Math.round` 而不是 `|0`
+（负数向零截断，整幅图会带上半个色阶的系统偏差）。
+
+**这个编码器验到哪一步**：产物由 Pillow 独立解码（PSNR 见上）、SOF0 采样因子断言 4:4:4、
+装进 `.face` 后 `verify_face.py` 结构校验通过、`.jpg` 帧与 `main.lua` 里的 `EXT` 一致。
+**没做的一件事**：把网页编码出的 `.jpg` 帧表盘装到真机上看。真机能解 JPEG 这件事，是用
+PC 端（Pillow，`subsampling=0`）产的 `.face` 验的 —— 格式上同一条 baseline 路径，
+但不是这一份编码器的产物。这是本仓库目前唯一一处「格式对得上、没上过真机」的地方。
+`tests/jpeg.mjs` 负责守着这些：解出产物的 SOF0 断言三分量全是 `0x11`，再用 Pillow 独立
+解码算 PSNR，并与同质量的 4:2:0 对照比色度 —— 差 10 dB 以上才说明 4:4:4 真的生效了。
+
+一帧到底多大取决于画面，没有「哪个一定更小」。本仓库两段素材的实测（212×520 单帧）：
+
+| 素材 | 画面 | PNG P256 | JPEG q80 |
 |---|---|---|---|
-| **默认**（保时长、降帧率） | N 帧摊满整段 | 降下来的帧率 | 内容完整、时长不变，**明显掉帧** |
-| **快放**（保帧率、压时长） | N 帧摊满整段 | 你指定的帧率 | **流畅**、内容完整，但播放变成 X 倍速 |
-
-两者**抽的是同一批帧、体积完全相同**，区别只在生成的 `main.lua` 里一个 `period` 值。
-所以「最小体积 + 流畅」是能同时拿到的，代价是时长被压掉。
-
-实测：8 秒 / 24fps 素材压到 46 帧 → 默认播放 8.0s（5.75fps，卡）；快放播放 1.9s（24fps，流畅，4.17 倍速）。
-
----
-
-## 配置说明
-
-### 色深与编码（每帧实测，212×520）
-
-| 档位 | 内部名 | 每帧 | 适用 |
-|---|---|---|---|
-| 高画质 RGB | `high` | 146.8 KB | 几乎不用（太大） |
-| 均衡 P256 | `balanced` | 66.7 KB | 素材颜色极其丰富时 |
-| 小体积 P128 | `small` | 53.0 KB | 画质优先 |
-| 极限 P64 | `tiny` | **41.5 KB** | **推荐起点** |
-| 极小 P32 | `micro` | 31.6 KB | 体积吃紧 |
-| 微缩 P16 | `nano` | **20.4 KB** | 极限压缩，画面明显丢色 |
-| JPEG q90 | `--fmt jpg` | 41.4 KB | 与 P64 同体积，但 P64 无损 —— 不如直接用 PNG |
-| JPEG q85 | | 32.7 KB | 甜点区上沿 |
-| JPEG q80 | | **27.5 KB** | **默认**，比 P64 PNG 小 34% |
-| JPEG q70 | | 21.4 KB | 体积优先 |
-| JPEG q60 | | 17.7 KB | 极限，噪点明显 |
-
-**PNG 和 JPEG 不是替代关系，是两种不同性质的损失。**
-
-| | 优点 | 缺点 |
-|---|---|---|
-| **P64 PNG** | 无损、平涂区干净、无噪点 | 只有 64 色，渐变 / 肤色处有**色带** |
-| **JPEG q80** | 连续色调无色带、体积只有 P64 的 0.66 倍 | 有损，边缘有**蚊子噪点 / 块效应** |
-
-经验：**真人 / 照片 / 渐变多的素材用 JPEG q80**；**动漫平涂 / 色块清楚的用 PNG P64**。
-
-> P 系列是**无损调色板**（量化到 N 色后再无损存 PNG），代价是渐变区出现色带。
-> 更细的实测数据（含分通道 PSNR、可复现脚本）见 [docs/体积与画质实测.md](./docs/体积与画质实测.md)。
-
-<details>
-<summary><b>JPEG 的两个反直觉细节</b></summary>
-
-**① 甜点区是 q80~q85。** q90 以上体积反超 P64 PNG（41.4 vs 41.5 KB），
-而 P64 是无损的 —— 那个档位不如直接用 PNG。
-
-**② Windows 版关掉了 JPEG 的色度子采样（走 4:4:4）。** PIL 默认的 4:2:0 会把色度砍到
-106×260，彩色边缘明显串色 —— 这是「JPEG 看起来糊」的主因。实测关掉只多 19% 体积，
-色度 PSNR 却涨 2.5 dB，是性价比最高的一刀。
-
-**安卓版做不到这点**：`Bitmap.compress` 固定 4:2:0，所以安卓导出的 JPEG 质量天花板低于 Windows 版。
-
-</details>
-
-### 帧率与帧数上限
-
-- **帧率**：24 FPS 是流畅度边界（实测 33 FPS 卡顿、24 FPS 正常、16 FPS 更稳）。
-  默认给 **12 FPS + 96 帧上限**，是为了避免 8 秒素材一上来就产出 7 MB 以上的表盘。
-- **帧数上限**：默认 96。超出时的行为由「快放」开关决定（见上一节）。
-
-### 其他
-
-| 参数 | 默认 | 说明 |
-|---|---|---|
-| 截取起始 | 0 s | 从素材第几秒开始取 |
-| 截取时长 | 全片 | 留空表示取到结尾 |
-| 表盘名称 | MyWatchface | 显示在表盘选择器里 |
-| 表盘 ID | 随机生成 | 10 位数字，随机会避开市集表盘 |
-| 体积预算 | 3.5 MB | 仅用于预估时的标红提醒，不阻断生成 |
-
----
-
-## 功能自定义详解
-
-界面第 2 页的四组设置。**主屏的一切都由 Lua 决定**（`.fprj` 里只有一个全透明挂载点），
-所以时间 / 日期 / 交互改的是生成的 `main.lua`；**息屏屏（AOD）不支持 Lua**，只能走 fprj 控件层。
-
-### 息屏显示（AOD）
-
-不做 AOD 的话，息屏时手环**停在动画最后一帧**（既费电又难看）。加上它就好了。
-
-生成物是一个**同级子工程**，不单独编译，主工程打包时一并编入：
-
-```
-MyFace.fprj + images/ + app/lua/
-AOD/
-├── AOD.fprj          ← 目录名与文件名都固定，编译器内建这条路径
-└── images/
-```
-
-AOD 屏**不能跑 Lua**（实测：往 `AOD.fprj` 里写 `Shape=34` 挂载点，它的 lua 不会入包，
-产物只多 88 字节）。所以 AOD 上的时间靠 `Shape=32` 数字位图 + `Value_Src` **系统数据源**。
-
-<details>
-<summary><b>数据源 ID 表</b></summary>
-
-| 数据源 | ID | 数据源 | ID |
-|---|---|---|---|
-| 时 | `0811` | 月 | `1012` |
-| 分 | `1011` | 日 | `1812` |
-| 秒 | `1811` | 星期 | `2012` |
-| 电量 | `0841` | 心率 | `0822` |
-
-ID 是十六进制字面量去掉 `0x` 与前导零；取自 Mi-Create 的 `sources.json` 里 `xiaomi_band_10` 一栏，
-即本工具用的 `DeviceType=466`。编译器只存数字、不校验，由系统在运行期解析。
-
-</details>
-
-默认「时间 + 日期」≈ **+155 KB**。四个要点：
-
-- **默认不放全屏黑底**。AMOLED 黑像素不发光，屏幕本身就是黑的，省下 431 KB。
-  想要保险可选「纯黑底图」（那就 +431 KB）。
-- **数字字号就是钱**：46×64 的时分数字（11 张图）≈ 127 KB，20×28 的日期 ≈ 24 KB。
-- **同一张 BitmapList 被多个控件复用时只算一次** —— 两个 `Shape=32`（时、分）合起来只付一份位图钱。
-- **字形来自内嵌字库**（`tools/gen_aod_font.py` 生成，两端同源），不再读系统字体 ——
-  所以 Windows 与安卓生成的 AOD 数字**逐像素一致**。
-
-<details>
-<summary><b>AOD 体积代价（逐项实测）</b></summary>
-
-| 项 | 代价 |
-|---|---|
-| AOD 空屏 | +88 B |
-| 每个 `Shape=30` 图片 | `宽 × 高 × 4 + 60` B |
-| 每个 `Shape=32` 数字组 | `图宽 × 图高 × 4 × 图数`（多控件共用同一 `BitmapList` 会去重） |
-
-一个反直觉的实测：**主屏**上加 `Shape=30` 小图标会被合成为整屏位图（+431 KB/个），
-**AOD 屏**不会（按图片实际尺寸算）。所以「AOD 上放小图标很便宜」和「主屏上放小图标很贵」不矛盾。
-
-</details>
-
-### 主屏时间 / 日期
-
-| 项 | 说明 |
-|---|---|
-| 显示开关 | 时间、日期各自独立开关 |
-| 位置 | 9 宫格锚点（左上 / 上中 / … / 右下）+ X/Y 像素偏移 |
-| 字号 | 8–200 |
-| 颜色 | 取色器或直接填 `#RRGGBB` |
-| 格式 | 系统 `strftime`：`%H:%M` `%Y/%m/%d` `%p %I:%M` 都行 |
-
-这部分走 Lua 的 `lvgl.Label` + `lvgl.ALIGN`，**不占额外体积**（字体在系统里），
-定位是像素级的，比 fprj 控件层灵活得多。
-
-### 点击交互
-
-| 选项 | 行为 |
-|---|---|
-| 无 | 不响应短按 |
-| 切换壁纸 | 多张壁纸之间轮换（只有 1 张时自动降级为「无」） |
-| 显示 / 隐藏时间日期 | 短按切换信息层显隐 |
-| 暂停 / 继续动画 | 短按冻结画面（省电小技巧） |
-
-实现是 `root:add_flag(lvgl.FLAG.CLICKABLE)` + `onevent(lvgl.EVENT.SHORT_CLICKED)`，
-子控件事件靠 `FLAG.EVENT_BUBBLE` 冒泡到根对象。
-
-> **跳转到系统 App（天气 / 闹钟 / 心率）在本代手环上做不到**，所以没有这个选项。
-> 实测：本机编译器在 `DeviceType=466` 下**完全忽略** `btn[...]` 控件名语义 ——
-> 把控件改名成 `btn[weather]` / `btn[alarm]` / `btn[hrm]`，五个产物**字节完全相同**。
-> 那是手环 8 Pro / 红米手表那几代的能力，Lua 侧也没有对外跳转的 API。**两条路都不通。**
-
-### 多壁纸
-
-第 1 张壁纸就是第 1 页里选的素材；第 2 张起在这里加。它们**沿用第 1 页的压缩 / 帧率 / 时长参数**，
-每张单独应用一次帧数上限。命名：第 1 张 `face_01.png…`，第 2 张 `w2_01.png…`，以此类推。
-
-> **每张壁纸独立占体积**。两张 12fps 的壁纸 ≈ 双倍体积 —— 生成前预估行会算进去。
-
-### 省电钩子
-
-<details>
-<summary>为什么同时挂 <code>pageOnPause</code> 和 <code>ScreenStateChangedCB</code></summary>
-
-```lua
-function ScreenStateChangedCB(pre, now, reason)
-    if pre ~= "ON" and now == "ON" then resumeActive()
-    elseif pre == "ON" and now ~= "ON" then pauseAll() end
-end
-```
-
-进 AOD 时表盘页面**并没有被切走**，`pageOnPause` 很可能不触发 ——
-只靠它会让动画在息屏下继续跑，续航直接崩。所以两个都要。
-
-</details>
-
----
-
-## 使用方法
-
-### Windows 版
-
-**1. 环境准备**
-
-```bash
-pip install -r watchface-tool/requirements.txt   # Pillow + tkinterdnd2
-```
-
-- 处理**视频**需要 `ffmpeg`（GIF / 图片不需要），装好后加入 PATH。
-- 打包环节是纯 Python，**不需要任何官方工具**。
-
-**2. 启动**
-
-```bash
-cd watchface-tool
-python main.py
-```
-
-**3. 操作流程**
-
-界面分**两个页签**，底部「生成 .face」固定贴底：
-
-| 页签 | 内容 |
-|---|---|
-| **① 动态壁纸** | 1. 素材 · 2. 参数 |
-| **② 功能自定义** | A. 息屏显示（AOD）· B. 壁纸（多张）· C. 主屏显示元素 · D. 点击交互 |
-| **底部（固定贴底）** | 生成按钮 · 进度条 · 状态行 |
-
-**页签 ①**：拖入素材（或点「选择素材」）→ 左侧**框选裁剪区域**（拖动移动、拖角点缩放、滚轮缩放）
-→ 右侧调压缩程度 / 编码格式 / JPEG 质量 / 帧率 / 截取区间 / 帧数上限 / 快放开关
-→ 看「预估」行确认体积（超预算标红）→ 点底部「生成 .face」。
-
-**页签 ②** 四组（全部可选，不做就是纯动态壁纸）：
-**A. 息屏显示（AOD）** —— 开关、底图（无 / 纯黑 / 自定义图片）、内容（不显示 / 时间 / 时间+日期）、
-时间 Y、日期 Y、颜色，下方是**实时预览**与体积预估；
-**B. 壁纸（多张，点击轮换）** —— 列表 + 「添加壁纸…」「移除选中」；
-**C. 主屏显示元素** —— 时间 / 日期各自开关，各带 9 宫格锚点 + ±X/±Y 偏移、字号、strftime 格式、颜色（含选色板）；
-**D. 点击交互** —— 短按表盘：无 / 切换壁纸 / 显示·隐藏时间日期 / 暂停·继续动画。
-
-最后点底部「生成 .face」，产物默认输出到素材同目录下的 `watchface_out/`。
-
-### 安卓版
-
-**1. 安装** —— 下载 [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) 安装（Android 7.0+）。
-
-**2. 操作流程** —— 同样是两页签 + 底部固定生成按钮。
-
-| 页签 | 控件 |
-|---|---|
-| **① 动态壁纸** | 选素材 · 裁剪区（拖动/角点/双指缩放，含「重置裁剪框」「铺满画面」）· 多壁纸（≤8 张，沿用同一套参数、裁切固定「全高居中」）· 压缩 6 档 · 帧率 7 档 · 编码 2 种 · 帧数上限 7 档 · JPEG 质量 5 档（非 JPEG 时置灰）· 起始/时长 · 快放开关 · 预估行「N 张 / 共 N 帧 · 约 X MB（含固定开销 431KB）」 |
-| **② 功能自定义** | 主屏时间 / 日期（各自开关、9 种对齐、X/Y 偏移、字号、颜色预设、strftime 格式）· 点击表盘（切壁纸 / 显隐时间日期 / 暂停动画）· 息屏 AOD（开关、底图、内容、时间行与日期行 Y、颜色，**带预览图**与体积预估） |
-| **底部（固定贴底）** | 生成按钮 · 进度条 · 状态 |
-
-产物存到 `Android/data/face.tool/files/faces/`。
-
-> 「生成」按钮放在滚动区**外面**固定贴底，任何屏幕尺寸 / 字号下都点得到 ——
-> 旧版把所有控件竖着塞在一屏里，小屏上按钮会被顶到屏幕外。
-> 裁剪预览与 AOD 预览用「基准高 + 权重」吃掉富余高度：放得下时参数按自然高度铺开，
-> 放不下时预览退到基准高、整页滚动。
->
-> 安卓版与 Windows 版都不用官方编译器，各有一份纯代码打包实现（Java / Python）。
-
-**3. 从源码自行构建**（不需要 Android Studio，不需要 Gradle）
-
-```bash
-cd watchface-android
-bash fetch_kotlinc.sh    # 首次：拉一套最小 Kotlin CLI（约 62 MB，装在 .kotlinc/，已 gitignore）
-# 需要：Android SDK build-tools（含 aapt2/d8/zipalign/apksigner）+ JDK 17+
-bash build.sh
-```
-
-流程：`aapt2 link → javac(Java) → kotlinc(Kotlin) → R8 → 塞 classes.dex → zipalign → apksigner`，
-产物 `watchface-tool.apk`。
-
-<details>
-<summary><b>构建链路的三个要点</b></summary>
-
-**界面是 Kotlin、核心算法是 Java**（零 Android 依赖，桌面 JVM 也能跑），两者在手工链里混编，不需要 Gradle。
-
-**R8 是必需的，不是可选项。** Kotlin 会带进 kotlin-stdlib，直接打包 APK 会从 49 KB 涨到 2.1 MB。
-脚本默认过一遍 **R8（full mode）**，把 1108 个 `kotlin/*` 类整棵摇掉 ——
-实测成品与纯 Java 版**同尺寸**。`NOR8=1 bash build.sh` 可跳过压缩换构建速度（约 10 s → 约 50 s）。
-R8 用的是 Android SDK 自带的 `cmdline-tools/*/lib/r8.jar`，不需要额外下载。
-
-**几条容易踩的坑，脚本里已处理：**
-
-1. `d8.bat` / `apksigner.bat` / R8 靠 **`JAVA_HOME`** 定位 JDK（PATH 里的 `java` 可能是别的版本）
-   —— 脚本里显式 `export JAVA_HOME=...`。
-2. Git Bash 下 Windows 路径要用 `/c/...` 形式，且 `javac` 用 `--release 8` 才能产出 minSdk 24 能用的字节码。
-3. **classpath 用 `;` 拼接时 Git Bash 不做路径转换** —— `/c/...` 形式 Java 认不出来，
-   症状是 `ClassNotFoundException: org.jetbrains.kotlin.cli.jvm.K2JVMCompiler`（看着像 jar 坏了）。
-   脚本里一律用 `cygpath -w` 转成 `C:\...`。
-4. kotlinc 的 `-no-stdlib` 只是关掉「自动从 kotlin-home 找 stdlib」，**不代表不用 stdlib** ——
-   还得自己把 `kotlin-stdlib.jar` 写进 `-classpath`，否则满屏 `cannot access built-in declaration 'kotlin.String'`。
-
-</details>
-
-### 命令行
-
-Windows 版支持无界面生成：
-
-```bash
-cd watchface-tool
-python main.py --cli \
-  --src 素材.gif --level tiny --fps 12 --max-frames 96 \
-  --fmt jpg --jpg-quality 80 \
-  --clip-start 0 --clip-dur 4 \
-  --name MyFace
-```
-
-<details>
-<summary><b>参数表</b>（点击展开）</summary>
-
-**基础参数**
-
-| 参数 | 说明 |
-|---|---|
-| `--src` | 素材路径（必填） |
-| `--level` | `high` / `balanced` / `small` / `tiny` / `micro` / `nano`，默认 `balanced` |
-| `--fps` | 目标帧率；省略则用源素材帧率 |
-| `--clip-start` / `--clip-dur` | 起始时间 / 截取时长（秒）；时长省略取到结尾 |
-| `--max-frames` | 总帧数上限，默认 96 |
-| `--fmt` | `png` / `jpg`，默认 `png` |
-| `--jpg-quality` | JPEG 质量，默认 80（仅 `--fmt jpg` 生效） |
-| `--speedup` | 保持帧率、压缩时长（快放）；默认是保时长、降帧率 |
-| `--crop` | 裁剪框 `x0,y0,x1,y1`；省略则默认居中 |
-| `--name` / `--id` | 表盘名称 / ID |
-| `--out` | 输出目录 |
-| `--no-time` | 不叠加时间 |
-
-**功能自定义参数**
-
-| 参数 | 说明 |
-|---|---|
-| `--date` | 叠加日期（默认只叠加时间） |
-| `--time-fmt` / `--date-fmt` | strftime 格式，默认 `%H:%M` / `%m/%d` |
-| `--time-pos` / `--date-pos` | LVGL 对齐名（`TOP_MID`、`CENTER`、`BOTTOM_RIGHT`…），默认 `TOP_MID` |
-| `--time-ofs` / `--date-ofs` | 像素偏移 `dx,dy`，默认 `0,30` / `0,86` |
-| `--time-size` / `--date-size` | 字号，默认 48 / 16 |
-| `--time-color` / `--date-color` | 颜色 `RRGGBB`，默认 `FFFFFF` / `EEEEEE` |
-| `--tap` | `none` / `cycle` 切壁纸 / `info` 显隐信息 / `anim` 暂停动画 |
-| `--wall <路径>` | 额外壁纸，可重复 |
-| `--aod` | 生成息屏显示子工程 |
-| `--aod-content` | `none` / `time`（默认）/ `both` 时间+日期 |
-| `--aod-bg` | `none`（默认，不占体积）/ `black` / `custom` |
-| `--aod-bg-image` | `--aod-bg custom` 时的图片路径 |
-| `--aod-time-y` / `--aod-date-y` | AOD 时间 / 日期行的 Y 坐标，默认 200 / 300 |
-| `--aod-color` | AOD 数字颜色 `#RRGGBB`（字形来自内嵌字库 `tools/gen_aod_font.py`） |
-
-</details>
-
-例：双壁纸 + AOD + 点按切壁纸
-
-```bash
-python main.py --cli \
-  --src w1.gif --wall w2.gif \
-  --level tiny --fps 8 --max-frames 48 \
-  --date --date-fmt "%Y/%m/%d" --tap cycle \
-  --aod --aod-content both \
-  --name MyFace
-```
-
----
-
-## 体积控制的三条结论
-
-1. **帧数才是主要杠杆，色深只是次要杠杆。**
-   P256 → P64 每帧只降 38%；而帧率 24 → 8 FPS 让**帧数**直接降 67%、体积同比例下降。
-   一段 8 秒素材在 24 FPS 下有 192 帧，即使 P64 也有 7.8 MB —— 这时应该先砍时长 / 帧率，
-   而不是继续压色深。
-
-2. **`.face` 里还有 431 KB 的固定开销**（尾部位图 212×520 RGBA8888，用于表盘选择器预览）。
-   帧数很少时它可能比全部帧数据还大，所以别指望把几十 KB 的小表盘再压下去。
-
-3. **想进一步缩小，按这个顺序调**：
-   **截取时长 → 帧率 → 帧数上限 → 色深档位 → 编码格式（JPEG）**。
-
-更细的实测数据（含分通道 PSNR、脚本可复现）见 [docs/体积与画质实测.md](./docs/体积与画质实测.md)。
-
----
-
-## 安装到手表
-
-生成的 `.face` 需要借助**第三方表盘工具**（配合 Mi Fitness 修改版）或 Mi Fitness 官方
-表盘通道安装到小米手环 11。
-
-**本工具只负责生成 `.face`，不涉及安装链路，也不对安装过程提供支持。**
-请自行确认你的安装方式与设备版本匹配。
-
----
-
-## PC 与安卓的一致性怎么保证（网页版另有一套）
-
-`main.lua` 的生成逻辑、AOD 的控件布局与描述块、`.face` 的拼装，在**两侧各有一份实现**
-（Python 与 Java/Kotlin）。这种「逐行照抄」最容易骗自己 —— 看着一样，字节不一样。
-
-所以仓库里带了一个**跨语言差分回归**：`python tools/diff_face.py`（约 40 s，只需 JDK + Pillow）。
-它用同一份用例表让两份实现各跑一遍，然后**逐字节**比对：
-
-| 阶段 | 比对对象 | 例数 |
-|---|---|---|
-| `lua` | 生成的 `main.lua` 全文 | 12 |
-| `aod` | AOD 控件表 + 描述块全部记录 | 12 |
-| `asm` | **整份 `.face` 的每一个字节**（含 AOD 与对齐边界） | 21 |
-| `font` | **AOD 数字位图的每一个像素** | 26 |
-
-比对全部字节而不是「关键字段」是有原因的：这个回归抓到的四个 bug（尾部对齐只做了一半、
-偏移量相对 / 绝对搞混、某个分支从没被执行过、一行 `append` 缩进错级多出假控件）
-**全都**发生在「关键字段看着都对」的地方。详见 [docs/项目经验.md](./docs/项目经验.md) 的 Bug 4/5/6。
-
-### 与官方编译器的一致性（可重跑）
-
-上面的差分证明「两份实现互相同意」，还要证明「它们与官方编译器也同意」。这条也有脚本：
-
-```bash
-python tools/roundtrip_face.py 样本1.face 样本2.face ...
-```
-
-它把一份现成 `.face` **拆回打包器的输入再拼回去**，要求结果与原件**逐字节相同**。
-拿官方编译器产出的 5 份样本（单壁纸 / AOD 时间 / AOD 时间+日期 / 三壁纸 / JPEG 帧）
-跑，结果是 `5/5 逐字节一致`。
-
-比往返回归更直接的一条证据也在本地做过：同一组参数分别用「官方编译器」和
-「纯代码打包」各跑一遍，两个 `.face` 直接 `cmp` —— 5 份全部零差异。
-这一步需要编译器本体（不在仓库里、也不再是运行依赖），所以只作为一次性实测记录，
-可重跑的部分就是 `tools/roundtrip_face.py`。
-
----
-
-## 关于 AI 协助
-
-**本项目在开发过程中大量使用了 AI 协助。** 这一点明确写在这里，不做隐瞒。
-
-- **代码 / 文档 / 逆向分析**：大部分由 AI（Claude、DeepSeek 等）在人工指导下生成与迭代。
-  人工负责定义需求、判断方案、验证结果、在 AI 走偏时纠正方向。
-- **实测数据**：`docs/` 里的所有数字都是**真机实跑出来的**，不是 AI 估算的。
-  体积 / 画质（`tools/bench_quality.py`）、格式结构（`tools/verify_face.py`）、
-  **两份实现是否等价**（`tools/diff_face.py`）都有可复现脚本；
-  只有 AOD 逐项开销那组是一次性受控实验，脚本未随仓库发布。
-
-**这意味着什么：**
-
-- ✅ 实际行为以**实测为准**，不以文档描述为准。文档与代码不一致时，是文档的错。
-- ⚠️ 未经充分人工审查的代码可能有隐藏缺陷。已在具体场景下验证可用，
-  但**不保证覆盖所有输入组合**。
-- ⚠️ 涉及安全、隐私、法律合规的场景请自行评估。
-
-如果你在意「AI 写的代码能不能信」——这个项目的态度是：**用可复现的实测数据说话**。
-关键结论都附了原始数据，能做成脚本的部分也一并给了，欢迎自己复跑打脸。
-
----
-
-## 项目经验
-
-开发过程中的踩坑记录、技术结论和方法论整理在 **[docs/项目经验.md](./docs/项目经验.md)**，其中包括：
-
-- `.face` 格式逆向的完整过程与关键突破点
-- 体积优化的三层杠杆，以及「为什么直觉是错的」（色深不是主杠杆）
-- 一个真实 bug 的根因分析：缩放框「不跟手」（增量 vs 常量混用）
-- JPEG 质量问题的根因定位（色度子采样）
-- 无 Gradle 构建安卓 APK 的链路与两个必踩的坑
-- 复盘：AI 协作中哪些地方有效、哪些地方容易出问题
-
----
-
-## 免责声明
-
-**请在使用前完整阅读本节。**
-
-1. **非官方工具。** 本项目是个人开发的第三方工具，与小米公司（Xiaomi Inc.）及任何关联公司
-   **无任何关系**，未获其授权、赞助、认可或技术支持。"小米"、"Xiaomi"、"Mi Band"、"Vela"
-   等为其各自权利人的商标。
-
-2. **使用风险自负。** 生成的 `.face` 文件、以及你将其安装到设备上的行为**完全由你自行承担风险**。
-   作者不对以下负责：设备损坏 / 变砖、数据丢失、保修失效；显示异常、黑屏、卡顿、耗电异常；
-   第三方安装工具导致的任何问题；账号被封禁或限制。
-
-3. **不提供安装支持。** 本工具只负责生成 `.face`。安装需第三方工具配合，不在本项目范围内，
-   作者不提供相关指导。
-
-4. **合规责任在你。** 你对自己生成和分发的内容负全部责任。请勿用未经授权的视频、图片、音乐、
-   角色形象等受版权保护的素材制作表盘，更不要公开分发这类产物 ——
-   把动漫、影视、游戏角色做成表盘分享，很多情况下**属于侵权**。
-
-5. **第三方组件。** 本项目不依赖、也不分发任何官方工具二进制（早期版本依赖表盘编译器，
-   现已由纯代码打包取代）。运行时依赖 Pillow / tkinter / ffmpeg 等，授权状况见 [NOTICE](./NOTICE)。
-
-6. **无担保。** 本软件按"原样"提供，不附带任何明示或暗示的担保，包括但不限于 merchantability
-   或 fitness for a particular purpose 的担保。详见 [LICENSE](./LICENSE)。
-
-7. **AI 生成内容。** 本项目大量使用 AI 协助开发（见[关于 AI 协助](#关于-ai-协助)）。
-   代码与文档可能存在 AI 引入的错误，**请自行审查后再用于关键场景**。
-
-8. **保留权利。** 作者保留在不对用户承担任何义务的前提下，随时修改、停止维护或删除本项目的权利。
-
-> **一句话**：这是给你自己折腾用的玩具工具，玩得开心，但出了事别找作者。
-
----
-
-## 许可
-
-本项目自有源码以 **MIT License** 发布，见 [LICENSE](./LICENSE)。
-
-第三方组件、参考来源、商标归属见 [NOTICE](./NOTICE)。
-
-> 注意：MIT 只覆盖本仓库中包含的源码。第三方运行时依赖（Pillow、ffmpeg 等）
-> 与商标归属不受本项目影响，见 [NOTICE](./NOTICE)。
-
----
-
-<details>
-<summary><b>项目结构</b>（点击展开）</summary>
-
-```
-miband11-watchface-maker/
-├── README.md                  本文档（中文）
-├── README_EN.md               English version
-├── LICENSE                    MIT
-├── NOTICE                     第三方来源与合规说明
-├── docs/
-│   ├── face格式规范.md          .face 二进制格式（逆向所得，完整字段表）
-│   ├── 体积与画质实测.md        全部实测数据
-│   ├── 项目经验.md             踩过的坑、结论、方法论
-│   └── images/                 README 里的界面截图
-│       ├── win-1-wallpaper.png    Windows 页面 1（真机运行截图）
-│       ├── win-2-function.png     Windows 页面 2（真机运行截图）
-│       ├── android-light.png      安卓版浅色（按源码 dp 与配色离线重绘）
-│       └── android-dark.png       安卓版深色（同上）
-├── tools/
-│   ├── verify_face.py          .face 结构检查器（只读，认得 AOD 产物的布局）
-│   ├── bench_quality.py        体积 / 画质实测脚本
-│   ├── lint_lua.py             给生成的 main.lua 做语法校验（全参数组合）
-│   ├── diff_face.py            **跨语言差分回归**：Python 实现 ↔ JVM 实现逐字节对拍
-│   ├── gen_aod_font.py         生成两端同源的 AOD 内嵌字库
-│   └── diff/                   上者的用例表、JVM 驱动与 Python 参考实现
-├── watchface-tool/             Windows 版（Python + tkinter）
-│   ├── main.py                 入口（GUI / --cli）
-│   ├── gui/
-│   │   ├── window.py           主窗口（两页：动态壁纸 / 功能自定义）
-│   │   ├── crop_canvas.py      裁剪预览画布（tk.Canvas 手绘）
-│   │   └── scroll_frame.py     可滚动容器（页面 2 用）
-│   └── watchface_tool/
-│       ├── constants.py        常量、格式定义与数据源 ID 表
-│       ├── extract.py          视频 / GIF / 图片 → 帧序列 + 帧数规划
-│       ├── crop.py             框选吸附到 212:520
-│       ├── quantize.py         压缩与编码（PNG / JPEG）
-│       ├── lua.py              生成 main.lua（动画 + 时间日期 + 交互 + 省电钩子）
-│       ├── aod.py              生成 AOD 息屏子工程（数字位图 + 数据源绑定）
-│       ├── aod_font.py         AOD 内嵌字库（由 tools/gen_aod_font.py 生成）
-│       ├── fprj.py             生成 .fprj（UTF-16 XML）
-│       ├── facebin.py          .face 打包/解包核心（纯代码，零第三方依赖）
-│       ├── build.py            收集工程文件 → 打包 → 落盘
-│       └── pipeline.py         编排
-└── watchface-android/          安卓版（Kotlin 界面 + Java 核心）
-    ├── build.sh                无 Gradle 构建脚本（javac + kotlinc + R8）
-    ├── fetch_kotlinc.sh        拉一套最小 Kotlin CLI
-    ├── r8-rules.pro            R8 保留规则
-    ├── app/
-    │   ├── AndroidManifest.xml
-    │   └── src/face/tool/
-    │       ├── MainActivity.kt  主界面（两页签，Kotlin）
-    │       ├── CropView.kt      裁剪控件（Kotlin）
-    │       ├── AodPreviewView.kt 息屏画面预览（Kotlin）
-    │       ├── AodRenderer.java 把 AOD 布局画成位图
-    │       └── FaceGenerator.java  编排（Java）
-    ├── core/face/              零 Android 依赖的核心算法（Java）
-    │   ├── FaceBuilder.java    拼装 .face（含 AOD，与 Python 版逐字节等价）
-    │   ├── Quantizer.java      调色板量化（中位切分 + Floyd-Steinberg）
-    │   ├── PngEncoder.java     PNG 编码（含调色板）
-    │   ├── AodGen.java         AOD 纯逻辑（布局 / 描述记录 / 体积预估）
-    │   ├── AodFont.java        AOD 内嵌字库（由 tools/gen_aod_font.py 生成）
-    │   └── LuaGen.java         生成 main.lua
-    └── test/face/              核心算法自测
-```
-
-</details>
+| `w2.gif` | 渐变波纹 + 光晕 | 12.0 KB | **10.8 KB** |
+| `long.gif` | 大片纯色竖条 | **1.3 KB** | 14.7 KB |
+
+纯色/扁平画面 PNG 赢得很轻松（调色板 + 无损，几乎不花代价），渐变和噪点多的画面才轮到
+JPEG 便宜。PC 端在真实照片素材上量到的是 JPEG q80 27.5 KB 对 P64 PNG 41.5 KB。
+所以界面上的体积预算走的是**同一条编码路径**（真编一帧再乘帧数），选格式之前就能看到数字。
+
+## 截取区间（只取素材里的一段）
+
+「截取起点 / 截取时长」两个秒数，语义与 PC 端 `watchface-tool` 一致：时长留空（或 0）=
+取到结尾，起点超过素材长度则退化成整段。
+
+- **帧数按裁切后的长度算**，不是素材全长：3.0s 素材取中间 1.0s，12fps 就是 12 帧，不是 36。
+- **视频**照旧等间隔 seek，只是时间点已含起点偏移（`planUniform` 直接返回绝对时间）。
+- **GIF** 只在区间内的帧池里挑；区间比一帧还窄时，退化成「离起点最近的那一帧」。
+- **多壁纸各自夹到自己的长度**：同一组输入，3.0s 素材取 1.0s，而 0.72s 的素材起点已超长、
+  退化成整段，提示里就显示成 `12 + 8 帧`。
+
+这两个框跟着 `input` 实时重算，边打边能看到帧数和体积变化（不是停在框里就不更新）。
+## 多壁纸（一个表盘里放几套动画，短按切换）
+
+- 选素材时**一次多选**：第 1 张落在 `lua/face*`，第 2 张起分别是 `lua/w2*`、`lua/w3*`……
+- 每张壁纸**独立选帧**（同一套目标帧率/帧数上限），列表里显示各自帧数，点哪行预览就切哪张。
+- 壁纸 ≥ 2 张时**自动开短按切换**（`tap: cycle`），否则第二张起在表上永远看不到。
+- 顺序 = 选择顺序，删除用行尾 `✕`，删完立刻重算帧数与体积。
+- GIF 和视频可以混排，不需要统一类型。
+
+Lua 侧的切换是 `onevent(PRESSED/CLICKED)` + 换图索引，不依赖任何系统 App 跳转
+（手环 11 的编译器不解析 `btn[...]` 语义，那条路是死的）。
+
+## 已支持 AOD 息屏
+
+息屏屏不支持 Lua，只能靠 `Shape=30`（静态图）与 `Shape=32`（数字位图 + `Value_Src`）驱动。
+当前实现：时分两位数字（46×64）+ 冒号小图，可加月日（20×28，月日之间是句点），
+颜色/纵向位置可调，默认不放全屏黑底（AMOLED 黑像素不发光，省下 431 KB）。
+
+数字字形是**浏览器实时渲染**成灰度遮罩再乘目标色，不打包任何字体文件 ——
+桌面版那份内嵌字库的授权来源，这里天然绕开了。
+
+实测代价：时间 **+130 KB** 左右（11 张 46×64 位图 ≈ 127 KB + 冒号 + 描述块），
+加日期再 +25 KB。
+
+月日之间是**句点**（显示成 `10.22`），不是冒号 —— 早期版本复用过冒号，日期那行会被看成
+第二行时间。句点用的是同一套字模画布（12×64）里单独一颗点，底边压在数字基线上；
+`tests/aod_build.mjs` 有断言守着「时间分隔两簇墨、日期分隔一簇墨且落在下半部」。
+
+## 还没做
+
+- **帧数触顶时只做了「降帧率、保时长」**，没做「快放、保帧率」（PC 端两种取舍都有）。
+- **安卓端 JPEG 恒 4:2:0**：`Bitmap.compress` 没有 4:4:4 的开关，这是平台限制 —— 网页端
+  因为自己写了编码器才绕得过去。
+- **不做 AOD 的真机表现是停在动画最后一帧**（表盘侧行为，跟网页端无关，记在这里免得重复踩）。
+
+## 踩过的坑（给后来改代码的人）
+
+1. **PNG 每个 chunk 多发 4 个零字节**：`chunk()` 里按 `8 + body + 4` 分配，正确是 `4 + body + 4`。
+   产出的图是**坏图**，但 `verify_face.py` 只查结构、不解码 PNG，所以一路绿灯 ——
+   是靠 Pillow 打开时才发现。改 PNG 编码相关代码后，务必用 Pillow 真开一遍。
+2. **GIF 逻辑屏幕描述符**：`packed` 之后是 1 字节背景索引 + 1 字节像素宽高比，别多跳一个。
+3. **多壁纸的哨兵 idx**：见上文，不是 `n-1`。
+4. **尾部预览块头是 12 字节**，结构 `<IHHI`（u32 零 + u16 宽 + u16 高 + u32 长度）。
+   写成 `<HHHI` 会短 2 字节，5 份样本全部差 `-2`。
+5. **判断"预览换没换"不能用全画面平均差，也不要用「近重复素材」去测**：大面积同色底会把差异
+   吃掉，所以用**变化像素占比**（任一通道差 > 24 记为变化）。但更隐蔽的坑在素材侧 ——
+   `b.gif` 原本是 `a.gif` 的换帧数版本（frame0 像素完全一致），于是「点第 2 页」这条断言
+   只能量到 0.86%，被当成 app 的 bug 查了半天。换页测试的素材必须**构图明显不同**
+   （现在是青绿圆环 vs 橙色圆形），阈值 2%。
+6. **Title / ID 是定长 ASCII 字段，别用 `TextEncoder` 写。** Title 只有 16 字节，
+   一个汉字占 3 字节，超长会被截在半个汉字上，产物里留下非法 UTF-8；而且两端（JS / Python）
+   从此不一样。正确做法是**逐码点**判断，非 ASCII 换成一个 `?` —— 与 PC 端
+   `s.encode("ascii","replace")` 的结果完全相同（`表盘Ab` → `??Ab`）。
+   浏览器这边多一层：`maxlength="16"` 数的是**字符**不是字节，中文照样能超，所以
+   生成前还要按字节截断。
+7. **`seekTo` 的超时兜底不能当成功。** 800 ms 没等到 `seeked` 就 `drawImage`，画的是
+   **上一帧** —— 产出一堆重复帧，但文件结构完全正常，事后极难发现。超时后必须回头核
+   `currentTime` 有没有真的跳到目标位置，没到就重试一次、再不行就报错。
+
+## 体积的两条硬结论（沿用原项目实测）
+
+- `.face` 有 **431 KB 固定开销**（212×520 RGBA8888 尾部预览位图），帧数再少也压不下去。
+- 体积主杠杆是**帧数**（时长 × 帧率），不是色深：P256→P64 每帧只降 38%，帧率减半体积直接减半。
