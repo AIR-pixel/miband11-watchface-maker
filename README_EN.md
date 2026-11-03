@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![Android](https://img.shields.io/badge/android-7.0%2B-3ddc84?logo=android)](https://github.com/AIR-pixel/miband11-watchface-maker/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Android-lightgrey)](https://github.com/AIR-pixel/miband11-watchface-maker)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Android%20%C2%B7%20Web-lightgrey)](https://github.com/AIR-pixel/miband11-watchface-maker)
 
 **English** · [简体中文](./README.md)
 
@@ -89,24 +89,29 @@ Three things that matter:
 
 | Platform | Download | Notes |
 |---|---|---|
-| **Web** | <https://miband-watchface.app.workbuddy.host/> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
+| **Web** | <https://air-pixel.github.io/miband11-watchface-maker/> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
 | **Android** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | Install directly. Android 7.0+ (minSdk 24) |
 | **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
 
-> Android may warn about "unknown sources" during install; allow it in settings.
+> Android may warn about "unknown sources" during install; allow it in settings. Download only from this repo's Releases, not third-party mirrors; after installing, turn off the unknown-sources allowance for that installer if you enabled it.
 
 ### Web version
 
-Live: <https://miband-watchface.app.workbuddy.host/> ·
-Source: [miband11-watchface-web](https://github.com/AIR-pixel/miband11-watchface-web) (separate repo, dependency-free vanilla JS)
+Live: <https://air-pixel.github.io/miband11-watchface-maker/> ·
+Backup (WorkBuddy, may expire with the event): <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
+Source: [watchface-web/](watchface-web/) (in this repo, dependency-free vanilla JS)
+Run locally: `cd watchface-web && node tests/serve.mjs 8765`, then open http://127.0.0.1:8765
 
 The same container format reimplemented for the browser: GIF decoding, palette quantization, PNG
 encoding (zlib via `CompressionStream`), Lua generation and `.face` packing all happen client-side —
 **nothing is uploaded**. Accepts **GIF and video** (mp4/webm/mov, frames are extracted on the main
 thread when you hit generate), plus multiple wallpapers, AOD and on-screen time/date.
 
-The web version does not do JPEG frames (browser `canvas.toBlob` always uses 4:2:0 chroma
-subsampling, below the desktop build's 4:4:4); every other parameter matches the desktop version.
+The web version now includes a built-in 4:4:4 JPEG encoder and no longer relies on the browser `canvas.toBlob` 4:2:0 chroma subsampling; every other parameter matches the desktop version.
+
+> Note: the bare host link without a `sharecode` only opens WorkBuddy's "incomplete link" prompt and does not open the tool; use the full link with `sharecode` above. If the hosted version is unavailable, run it locally instead.
+
+The web version currently accepts GIF / video only, not still images; use the Windows / Android build for still images.
 
 ---
 
@@ -590,6 +595,8 @@ So the repo ships a **cross-language differential regression**:
 `python tools/diff_face.py` (~40 s, needs only a JDK + Pillow). It runs both implementations over
 the same case tables and compares them **byte for byte**:
 
+> Note: `diff_face.py` covers only the Python and Java/Kotlin implementations, not the web version; the web version's equivalence is covered by its own byte-exact regression and UI end-to-end tests in `watchface-web/tests/`, see [watchface-web/README.md](./watchface-web/README.md).
+
 | Stage | What is compared | Cases |
 |---|---|---|
 | `lua` | The full generated `main.lua` | 12 |
@@ -743,6 +750,7 @@ miband11-watchface-maker/
 │   ├── bench_quality.py       Size / quality measurement script
 │   ├── lint_lua.py            Syntax check for generated main.lua (all parameter combinations)
 │   ├── diff_face.py           **Cross-language differential regression**: Python ↔ JVM, byte-exact
+│   ├── roundtrip_face.py      Round-trip unpack/repack regression: byte-identical to official compiler output
 │   ├── gen_aod_font.py        Generates the shared embedded AOD font
 │   └── diff/                  Case tables, JVM driver, and Python reference implementation
 ├── watchface-tool/            Windows build (Python + tkinter)
@@ -762,6 +770,15 @@ miband11-watchface-maker/
 │       ├── facebin.py         .face pack/unpack core (pure code, no third-party deps)
 │       ├── build.py           Collect project files → pack → write out
 │       └── pipeline.py        Orchestration
+├── watchface-web/            Web build (vanilla JS, zero dependencies)
+│   ├── index.html              UI entry point
+│   ├── app.js                  UI logic (preview, parameters, size estimate)
+│   ├── style.css               UI styles
+│   ├── package.json            Package info (type: module)
+│   ├── src/
+│   │   ├── worker.js           Generation runs in a Worker
+│   │   └── core/               GIF decoding, video frame extraction, quantization, PNG/JPEG encoding, Lua generation, .face packing
+│   └── tests/                  Byte-exact regression, structure checks, UI end-to-end (excluding tests/golden-src/ binary fixtures)
 └── watchface-android/         Android build (Kotlin UI + Java core)
     ├── build.sh               Gradle-free build script (javac + kotlinc + R8)
     ├── fetch_kotlinc.sh       Fetches a minimal Kotlin CLI
