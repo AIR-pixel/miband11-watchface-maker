@@ -84,7 +84,7 @@
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
-| **网页版** | <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
+| **网页版** | <https://air-pixel.github.io/miband11-watchface-maker/> | 浏览器直接用，零安装。适合手机、平板、临时借用别人的电脑 |
 | **安卓** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | 直接安装。Android 7.0+（minSdk 24） |
 | **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | 源码包，需自行装 Python 依赖（`pip install -r requirements.txt`） |
 
@@ -92,7 +92,8 @@
 
 ### 网页版
 
-在线版：<https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
+在线版：<https://air-pixel.github.io/miband11-watchface-maker/> ·
+备用（WorkBuddy，活动结束可能失效）：<https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
 源码：[watchface-web/](watchface-web/)（本仓库内，零依赖原生 JS）
 本地运行：`cd watchface-web && node tests/serve.mjs 8765`，浏览器打开 http://127.0.0.1:8765
 

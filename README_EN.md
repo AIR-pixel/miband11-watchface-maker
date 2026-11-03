@@ -89,7 +89,7 @@ Three things that matter:
 
 | Platform | Download | Notes |
 |---|---|---|
-| **Web** | <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
+| **Web** | <https://air-pixel.github.io/miband11-watchface-maker/> | Runs in the browser, zero install. Handy on phones, tablets, or a borrowed PC |
 | **Android** | [watchface-tool-android-v2.2.1.apk](../../releases/latest/download/watchface-tool-android-v2.2.1.apk) | Install directly. Android 7.0+ (minSdk 24) |
 | **Windows** | [watchface-tool-pc-v2.2.1.zip](../../releases/latest/download/watchface-tool-pc-v2.2.1.zip) | Source package — install Python deps yourself (`pip install -r requirements.txt`) |
 
@@ -97,7 +97,8 @@ Three things that matter:
 
 ### Web version
 
-Live: <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
+Live: <https://air-pixel.github.io/miband11-watchface-maker/> ·
+Backup (WorkBuddy, may expire with the event): <https://miband-watchface.app.workbuddy.host/?sharecode=6EL323Y5Q5> ·
 Source: [watchface-web/](watchface-web/) (in this repo, dependency-free vanilla JS)
 Run locally: `cd watchface-web && node tests/serve.mjs 8765`, then open http://127.0.0.1:8765
 
